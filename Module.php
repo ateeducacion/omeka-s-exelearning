@@ -206,7 +206,7 @@ class Module extends AbstractModule
             }
 
             // Use secure content proxy instead of direct file access
-        $previewUrl = $view->url('exelearning-content', ['hash' => $hash, 'file' => 'index.html']);
+            $previewUrl = $view->url('exelearning-content', ['hash' => $hash, 'file' => 'index.html']);
             if (!$this->isTeacherModeVisible($media)) {
                 $previewUrl .= '?teacher_mode_visible=0';
             }
