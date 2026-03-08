@@ -55,10 +55,7 @@ services:
         # Ensure CSVImport is installed (in case auto-install didn't yet)
         omeka-s-cli module:install CSVImport || true
 
-        # Seed eXeLearning test data (creates item with .elpx file)
-        if [ -f /data/seed-exelearning.sh ]; then
-          sh /data/seed-exelearning.sh || true
-        fi
+        echo 'Post-configure complete. Run "make seed" to create test data.'
 
     volumes:
       - omekas_data:/var/www/html/volume:Z

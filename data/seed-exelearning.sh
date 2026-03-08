@@ -15,10 +15,21 @@ KEY_CREDENTIAL="${2:-}"
 
 if [ -z "$KEY_IDENTITY" ] || [ -z "$KEY_CREDENTIAL" ]; then
     echo "No API key provided, creating one..."
-    if command -v docker >/dev/null 2>&1 && docker compose ps --services 2>/dev/null | grep -q omekas; then
-        API_OUTPUT=$(docker compose exec -T omekas omeka-s-cli user:create-api-key admin@example.com "seed-$(date +%s)" 2>&1)
-        KEY_IDENTITY=$(echo "$API_OUTPUT" | grep -E '^\|' | tail -1 | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}')
-        KEY_CREDENTIAL=$(echo "$API_OUTPUT" | grep -E '^\|' | tail -1 | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
+
+    # Determine how to run omeka-s-cli (inside container vs outside via docker)
+    if command -v omeka-s-cli >/dev/null 2>&1; then
+        CLI_CMD="omeka-s-cli"
+    elif command -v docker >/dev/null 2>&1 && docker compose ps --services 2>/dev/null | grep -q omekas; then
+        CLI_CMD="docker compose exec -T -w /var/www/html/volume omekas omeka-s-cli"
+    else
+        CLI_CMD=""
+    fi
+
+    if [ -n "$CLI_CMD" ]; then
+        KEY_LABEL="seed-$(date +%s)"
+        API_OUTPUT=$($CLI_CMD user:create-api-key admin@example.com "$KEY_LABEL" 2>&1)
+        KEY_IDENTITY=$(echo "$API_OUTPUT" | grep '|' | grep -v '^+' | tail -1 | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}')
+        KEY_CREDENTIAL=$(echo "$API_OUTPUT" | grep '|' | grep -v '^+' | tail -1 | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
     fi
 
     if [ -z "$KEY_IDENTITY" ] || [ -z "$KEY_CREDENTIAL" ]; then
@@ -94,7 +105,8 @@ SITE_RESPONSE=$(curl -s -X POST "${OMEKA_URL}/api/sites?${API_AUTH}" \
         "o:title": "eXeLearning Demo",
         "o:slug": "exelearning-demo",
         "o:theme": "default",
-        "o:is_public": true
+        "o:is_public": true,
+        "o:navigation": []
     }')
 SITE_ID=$(echo "$SITE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('o:id',''))" 2>/dev/null || echo "")
 

@@ -20,7 +20,7 @@ else
     SYSTEM_OS := unix
 endif
 
-.PHONY: help check-docker check-bun up upd down pull build lint fix shell clean \
+.PHONY: help check-docker check-bun up upd down pull build lint fix shell clean seed \
         fetch-editor-source build-editor build-editor-no-update clean-editor \
         package generate-pot update-po check-untranslated compile-mo i18n test test-coverage
 
@@ -123,10 +123,13 @@ else
 endif
 
 up: check-docker
-	docker compose up --remove-orphans
+	docker compose up --detach --remove-orphans
+	@$(MAKE) seed
+	docker compose logs -f
 
 upd: check-docker
 	docker compose up --detach --remove-orphans
+	@$(MAKE) seed
 
 down: check-docker
 	docker compose down
@@ -142,6 +145,22 @@ shell: check-docker
 
 clean: check-docker
 	docker compose down -v --remove-orphans
+
+seed: check-docker
+	@echo "Waiting for Omeka S to be ready..."
+	@for i in $$(seq 1 30); do \
+		STATUS=$$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/items 2>/dev/null); \
+		if [ "$$STATUS" = "200" ]; then \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "Timeout waiting for Omeka S API"; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done
+	@echo "Seeding test data..."
+	@sh data/seed-exelearning.sh
 
 # ============================================================================
 # Code Quality
