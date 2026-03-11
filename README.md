@@ -1,5 +1,10 @@
 # eXeLearning
 
+<a href="https://ateeducacion.github.io/omeka-s-playground/?blueprint=https%3A%2F%2Fraw.githubusercontent.com%2Fexelearning%2Fomeka-s-exelearning%2Frefs%2Fheads%2Fmain%2Fblueprint.json">
+  <img src="https://raw.githubusercontent.com/ateeducacion/omeka-s-playground/main/ogimage.png" alt="Try eXeLearning in your browser" width="220">
+</a><br>
+<small><a href="https://ateeducacion.github.io/omeka-s-playground/?blueprint=https%3A%2F%2Fraw.githubusercontent.com%2Fexelearning%2Fomeka-s-exelearning%2Frefs%2Fheads%2Fmain%2Fblueprint.json">Try in your browser</a></small>
+
 ![CI](https://img.shields.io/github/actions/workflow/status/exelearning/omeka-s-exelearning/ci.yml?label=CI)
 [![codecov](https://codecov.io/gh/exelearning/omeka-s-exelearning/graph/badge.svg)](https://codecov.io/gh/exelearning/omeka-s-exelearning)
 ![Omeka S Version](https://img.shields.io/badge/Omeka_S-%3E%3D3.0-blue)
