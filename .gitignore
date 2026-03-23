@@ -14,3 +14,4 @@ asset/static
 # Local editor checkout fetched during build
 exelearning/
 .env
+.playwright-mcp/

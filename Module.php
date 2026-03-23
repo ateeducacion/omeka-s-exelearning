@@ -12,6 +12,7 @@ use Omeka\Module\AbstractModule;
 use Omeka\Mvc\Controller\Plugin\Messenger;
 use Omeka\Stdlib\Message;
 use ExeLearning\Form\ConfigForm;
+use ExeLearning\Service\StaticEditorInstaller;
 
 /**
  * Main class for the ExeLearning module.
@@ -195,7 +196,7 @@ class Module extends AbstractModule
                     $result = $elpService->processUploadedFile($media);
                     $hash = $result['hash'];
                     $hasPreview = $result['hasPreview'];
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     $logger->err(sprintf('[ExeLearning] Auto-process failed: %s', $e->getMessage()));
                     continue;
                 }
@@ -205,15 +206,16 @@ class Module extends AbstractModule
                 continue;
             }
 
-            // Use secure content proxy instead of direct file access
-            $previewUrl = $view->url('exelearning-content', ['hash' => $hash, 'file' => 'index.html']);
+            // Pass the relative content path; JS constructs the full URL from
+            // window.location so the playground SW scope prefix is always included.
+            $contentPath = '/exelearning/content/' . $hash . '/index.html';
             if (!$this->isTeacherModeVisible($media)) {
-                $previewUrl .= '?teacher_mode_visible=0';
+                $contentPath .= '?teacher_mode_visible=0';
             }
 
             echo $view->partial('exelearning/public/item-show', [
                 'media' => $media,
-                'previewUrl' => $previewUrl,
+                'contentPath' => $contentPath,
             ]);
         }
     }
@@ -247,7 +249,7 @@ class Module extends AbstractModule
                 $hash = $result['hash'];
                 $hasPreview = $result['hasPreview'];
                 $logger->info(sprintf('[ExeLearning] Auto-process complete: hash=%s, hasPreview=%s', $hash, $hasPreview ? 'yes' : 'no'));
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $logger->err(sprintf('[ExeLearning] Auto-process failed: %s', $e->getMessage()));
                 return;
             }
@@ -257,15 +259,16 @@ class Module extends AbstractModule
             return;
         }
 
-        // Use secure content proxy instead of direct file access
-        $previewUrl = $view->url('exelearning-content', ['hash' => $hash, 'file' => 'index.html']);
+        // Pass the relative content path; JS constructs the full URL from
+        // window.location so the playground SW scope prefix is always included.
+        $contentPath = '/exelearning/content/' . $hash . '/index.html';
         if (!$this->isTeacherModeVisible($media)) {
-            $previewUrl .= '?teacher_mode_visible=0';
+            $contentPath .= '?teacher_mode_visible=0';
         }
 
         echo $view->partial('exelearning/admin/media-show', [
             'media' => $media,
-            'previewUrl' => $previewUrl,
+            'contentPath' => $contentPath,
         ]);
     }
 
@@ -419,7 +422,7 @@ JS
             $results = $stmt->fetchAll(\PDO::FETCH_COLUMN);
 
             return array_map('intval', $results);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $logger = $services->get('Omeka\Logger');
             $logger->err(sprintf('[ExeLearning] Failed to get item IDs: %s', $e->getMessage()));
             return [];
@@ -498,7 +501,7 @@ JS
         try {
             $media = $services->get('Omeka\ApiManager')
                 ->read('media', $mediaId)->getContent();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $logger->err(sprintf(
                 'ExeLearning: Could not load media representation for %d: %s',
                 $mediaId,
@@ -525,7 +528,7 @@ JS
                 $result['hash'],
                 $result['hasPreview'] ? 'yes' : 'no'
             ));
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $logger->err(sprintf(
                 'ExeLearning: Failed to process uploaded file for media %d: %s',
                 $mediaId,
@@ -577,7 +580,7 @@ JS
                 $this->deleteDirectory($extractPath);
                 $logger->info(sprintf('ExeLearning: Deleted extracted content at %s', $extractPath));
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $logger->err(sprintf(
                 'ExeLearning: Failed to cleanup media: %s',
                 $e->getMessage()
@@ -616,6 +619,47 @@ JS
      * @param mixed $media
      * @return bool
      */
+    /**
+     * Build an absolute content proxy URL for the given hash.
+     *
+     * Derives the base path from the actual request URI path so that the
+     * playground prefix (/playground/{uuid}/php83/) is correctly included
+     * even in PHP-WASM environments where $_SERVER['SCRIPT_NAME'] does not
+     * contain it (making getBasePath() unreliable).
+     */
+    protected function buildContentUrl(string $hash): string
+    {
+        $request = $this->getServiceLocator()->get('Request');
+        $uri = $request->getUri();
+        $scheme = $uri->getScheme();
+        $port = $uri->getPort();
+        $serverUrl = $scheme . '://' . $uri->getHost();
+        if ($port && !(($scheme === 'http' && $port == 80) || ($scheme === 'https' && $port == 443))) {
+            $serverUrl .= ':' . $port;
+        }
+        $basePath = $this->extractBasePath($uri->getPath());
+        return $serverUrl . $basePath . '/exelearning/content/' . $hash . '/index.html';
+    }
+
+    /**
+     * Derive the Omeka base path from the actual request URI path.
+     *
+     * Strips everything from the first known Omeka route segment onward
+     * (/admin/, /s/, /api/). This is reliable in PHP-WASM playgrounds where
+     * the full URL path (e.g. /playground/{uuid}/php83/admin/...) is preserved
+     * in the request URI even when $_SERVER['SCRIPT_NAME'] is not.
+     */
+    protected function extractBasePath(string $uriPath): string
+    {
+        foreach (['/admin/', '/s/', '/api/'] as $marker) {
+            $pos = strpos($uriPath, $marker);
+            if ($pos !== false) {
+                return substr($uriPath, 0, $pos);
+            }
+        }
+        return '';
+    }
+
     /**
      * Check if teacher mode toggler should be visible for a media resource.
      */
@@ -660,7 +704,129 @@ JS
             'exelearning_show_edit_button' => $settings->get('exelearning_show_edit_button', true) ? '1' : '0',
         ]);
 
-        return $renderer->formCollection($form, false);
+        $formHtml = $renderer->formCollection($form, false);
+
+        return $this->renderEditorStatusSection($renderer, $settings) . $formHtml;
+    }
+
+    /**
+     * Render the embedded editor status and install section.
+     *
+     * @param PhpRenderer $renderer
+     * @param mixed $settings Omeka settings service
+     * @return string
+     */
+    protected function renderEditorStatusSection(PhpRenderer $renderer, $settings): string
+    {
+        $isInstalled = StaticEditorInstaller::isEditorInstalled();
+        $version = $settings->get(StaticEditorInstaller::SETTING_VERSION, '');
+        $installedAt = $settings->get(StaticEditorInstaller::SETTING_INSTALLED_AT, '');
+
+        $translate = function ($text) use ($renderer) {
+            return $renderer->translate($text);
+        };
+
+        // Get CSRF token from the page form element.
+        $csrf = new \Laminas\Form\Element\Csrf('csrf');
+        $csrfValue = $csrf->getValue();
+
+        $html = '<fieldset id="exelearning-editor-status">';
+        $html .= '<legend>' . $renderer->escapeHtml($translate('Embedded Editor')) . '</legend>'; // @translate
+
+        // Status display
+        $html .= '<div class="field"><div class="field-meta">';
+        $html .= '<label>' . $renderer->escapeHtml($translate('Status')) . '</label>'; // @translate
+        $html .= '</div><div class="inputs">';
+        $html .= '<span id="exelearning-status-icon">';
+        if ($isInstalled) {
+            $html .= '<span style="color: #46b450;">&#10003;</span> ';
+            $html .= $renderer->escapeHtml($translate('Installed')); // @translate
+            if ($version) {
+                $html .= ' &mdash; v' . $renderer->escapeHtml($version);
+            }
+            if ($installedAt) {
+                $html .= ' (' . $renderer->escapeHtml($translate('installed on'));  // @translate
+                $html .= ' ' . $renderer->escapeHtml($installedAt) . ')';
+            }
+        } else {
+            $html .= '<span style="color: #dc3232;">&#10007;</span> ';
+            $html .= $renderer->escapeHtml($translate('Not installed')); // @translate
+        }
+        $html .= '</span>';
+        $html .= '</div></div>';
+
+        // Install/update button + status area
+        $html .= '<div class="field"><div class="field-meta"></div><div class="inputs">';
+        if (!$isInstalled) {
+            $html .= '<p>';
+            $html .= $renderer->escapeHtml($translate( // @translate
+                'The embedded eXeLearning editor is not installed.'
+                . ' You can download and install the latest version automatically from GitHub.'
+            ));
+            $html .= '</p>';
+        }
+
+        $buttonLabel = $isInstalled
+            ? $renderer->escapeHtml($translate('Update to Latest Version')) // @translate
+            : $renderer->escapeHtml($translate('Download & Install Editor')); // @translate
+        $buttonClass = $isInstalled ? 'button' : 'button active';
+        $html .= '<button type="button" id="exelearning-install-btn" class="' . $buttonClass . '">';
+        $html .= $buttonLabel;
+        $html .= '</button>';
+
+        // Progress area (hidden by default)
+        $html .= '<div id="exelearning-install-progress" style="display: none; margin-top: 10px;">';
+        $html .= '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">';
+        $html .= '<span class="o-icon-transmit" aria-hidden="true"></span>';
+        $html .= '<span id="exelearning-install-message"></span>';
+        $html .= '</div>';
+        $html .= '<div style="background: #e0e0e0; border-radius: 4px; height: 8px; width: 100%; max-width: 400px; overflow: hidden;">';
+        $html .= '<div id="exelearning-install-bar" style="background: #087cb8; height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 4px;"></div>';
+        $html .= '</div>';
+        $html .= '</div>';
+
+        // Result area (hidden by default)
+        $html .= '<div id="exelearning-install-result" style="display: none; margin-top: 10px;"></div>';
+
+        $html .= '</div></div>';
+
+        $html .= '<div class="field"><div class="field-meta"></div><div class="inputs">';
+        $html .= '<p class="explanation">';
+        $html .= sprintf(
+            $renderer->escapeHtml($translate('Developers can also build the editor from source using %s.')), // @translate
+            '<code>make build-editor</code>'
+        );
+        $html .= '</p>';
+        $html .= '</div></div>';
+
+        $html .= '</fieldset>';
+
+        // Configuration for the external installer JS
+        $installUrl = $renderer->serverUrl() . $renderer->basePath() . '/admin/exelearning/install-editor';
+        $jsConfig = [
+            'installUrl' => $installUrl,
+            'csrfToken' => $csrfValue,
+            'githubApiUrl' => StaticEditorInstaller::GITHUB_API_URL,
+            'jsdelivrApiUrl' => StaticEditorInstaller::JSDELIVR_API_URL,
+            'assetPrefix' => StaticEditorInstaller::ASSET_PREFIX,
+            'strings' => [
+                'pleaseWait' => $translate('Please wait...'), // @translate
+                'discovering' => $translate('Checking latest version...'), // @translate
+                'installing' => $translate('Installing editor...'), // @translate
+                'downloading' => $translate('Downloading editor...'), // @translate
+                'downloadingProgress' => $translate('Downloading... {downloaded} MB / {total} MB'), // @translate
+                'error' => $translate('Installation failed.'), // @translate
+                'networkError' => $translate('Network error. Please check your connection and try again.'), // @translate
+                'downloadFailed' => $translate('Could not download the editor. All download sources failed.'), // @translate
+                'tryAgain' => $translate('Try Again'), // @translate
+            ],
+        ];
+
+        $html .= '<script>window.exelearningInstaller = ' . json_encode($jsConfig) . ';</script>';
+        $html .= '<script src="' . $renderer->escapeHtmlAttr($renderer->assetUrl('js/exelearning-installer.js', 'ExeLearning'))
+            . '"></script>';
+
+        return $html;
     }
 
     /**

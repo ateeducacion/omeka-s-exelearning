@@ -76,11 +76,27 @@ jobs:
           name: ExeLearning-${{ env.RELEASE_TAG }}
           path: ExeLearning-${{ env.RELEASE_TAG }}.zip
 
+      - name: Build Playground URL for this release
+        if: github.event_name == 'push'
+        id: playground
+        run: |
+          TAG_NAME="${GITHUB_REF##*/}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/ExeLearning-${RELEASE_TAG}.zip"
+          BLUEPRINT=$(jq --arg url "$RELEASE_URL" '.modules[0].source.url = $url' blueprint.json)
+          ENCODED=$(echo "$BLUEPRINT" | base64 -w 0 | tr '+/' '-_' | tr -d '=')
+          echo "url=https://ateeducacion.github.io/omeka-s-playground/?blueprint-data=${ENCODED}" >> $GITHUB_OUTPUT
+
       - name: Publish/Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'push' && github.ref_name || env.RELEASE_TAG }}
           files: ExeLearning-${{ env.RELEASE_TAG }}.zip
           generate_release_notes: true
+          append_body: true
+          body: |
+
+            ---
+
+            <a href="${{ steps.playground.outputs.url }}"><img src="https://raw.githubusercontent.com/ateeducacion/omeka-s-playground/main/ogimage.png" alt="Try in Omeka-S Playground" width="220"></a>
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

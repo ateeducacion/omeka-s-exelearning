@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Laminas\Mvc\Controller;
 
+use Laminas\Http\Request;
 use Laminas\Http\Response;
 
 /**
@@ -27,8 +28,11 @@ abstract class AbstractActionController
         $this->request = $request;
     }
 
-    public function getRequest(): ?object
+    public function getRequest(): object
     {
+        if (!$this->request) {
+            $this->request = new Request();
+        }
         return $this->request;
     }
 
@@ -140,6 +144,19 @@ abstract class AbstractActionController
                                             }
                                         };
                                     }
+                                    if ($name === 'Omeka\Settings') {
+                                        return new class {
+                                            private array $store = [];
+                                            public function set(string $key, $value): void
+                                            {
+                                                $this->store[$key] = $value;
+                                            }
+                                            public function get(string $key, $default = null)
+                                            {
+                                                return $this->store[$key] ?? $default;
+                                            }
+                                        };
+                                    }
                                     return null;
                                 }
                             };
@@ -230,6 +247,7 @@ abstract class AbstractActionController
         return new class {
             public function addError(string $message): void {}
             public function addSuccess(string $message): void {}
+            public function addWarning(string $message): void {}
         };
     }
 

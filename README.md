@@ -64,7 +64,7 @@ By default, `make build-editor` fetches `https://github.com/exelearning/exelearn
 EXELEARNING_EDITOR_REF=vX.Y.Z EXELEARNING_EDITOR_REF_TYPE=tag make build-editor
 ```
 
-> **Important:** Cloning the repository without building the editor will show version `0.0.0` and the editor will not work. Always download from [Releases](https://github.com/exelearning/omeka-s-exelearning/releases) for production use.
+> **Important:** It is recommended to download from [Releases](https://github.com/exelearning/omeka-s-exelearning/releases) for production use, which includes the embedded editor pre-built. If you clone the repository without building the editor, you can install it from the Omeka S admin panel at **Modules > ExeLearning > Configure** using the "Download & Install Editor" button, which fetches the latest static editor package from GitHub Releases automatically. No remote loading is used at runtime.
 
 ## Usage
 

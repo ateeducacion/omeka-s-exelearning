@@ -23,7 +23,12 @@ class ExeLearningRendererTest extends TestCase
     protected function setUp(): void
     {
         $this->elpService = $this->createMock(ElpFileService::class);
-        $this->renderer = new ExeLearningRenderer($this->elpService);
+        $this->renderer = new ExeLearningRenderer($this->elpService, $this->createMockRequest());
+    }
+
+    private function createMockRequest(): \Laminas\Http\Request
+    {
+        return new \Laminas\Http\Request();
     }
 
     private function callProtectedMethod(object $object, string $method, array $args = [])
@@ -272,7 +277,7 @@ class ExeLearningRendererTest extends TestCase
         $elpService->method('getMediaHash')->willReturn(null);
         $elpService->method('hasPreview')->willReturn(false);
 
-        $renderer = new ExeLearningRenderer($elpService);
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
 
         $view = new \Laminas\View\Renderer\PhpRenderer();
         $media = new MediaRepresentation(
@@ -298,7 +303,7 @@ class ExeLearningRendererTest extends TestCase
         $elpService->method('getMediaHash')->willReturn($hash);
         $elpService->method('hasPreview')->willReturn(true);
 
-        $renderer = new ExeLearningRenderer($elpService);
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
 
         $view = new \Laminas\View\Renderer\PhpRenderer();
         $media = new MediaRepresentation(
@@ -329,7 +334,7 @@ class ExeLearningRendererTest extends TestCase
         $elpService->method('getMediaHash')->willReturn($hash);
         $elpService->method('hasPreview')->willReturn(true);
 
-        $renderer = new ExeLearningRenderer($elpService);
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
 
         $view = new \Laminas\View\Renderer\PhpRenderer();
         $media = new MediaRepresentation(
@@ -358,7 +363,7 @@ class ExeLearningRendererTest extends TestCase
         $elpService->method('getMediaHash')->willReturn($hash);
         $elpService->method('hasPreview')->willReturn(true);
 
-        $renderer = new ExeLearningRenderer($elpService);
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
 
         $view = new \Laminas\View\Renderer\PhpRenderer();
         $media = new MediaRepresentation(
@@ -386,7 +391,7 @@ class ExeLearningRendererTest extends TestCase
         $elpService->method('getMediaHash')->willReturn($hash);
         $elpService->method('hasPreview')->willReturn(true);
 
-        $renderer = new ExeLearningRenderer($elpService);
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
 
         $view = new \Laminas\View\Renderer\PhpRenderer();
         $media = new MediaRepresentation(
@@ -416,7 +421,7 @@ class ExeLearningRendererTest extends TestCase
         $elpService = $this->createMock(ElpFileService::class);
         $elpService->method('getMediaHash')->willThrowException(new \Exception('Test error'));
 
-        $renderer = new ExeLearningRenderer($elpService);
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
 
         $view = new \Laminas\View\Renderer\PhpRenderer();
         $media = new MediaRepresentation(
@@ -558,7 +563,7 @@ class ExeLearningRendererTest extends TestCase
         $elpService->method('getMediaHash')->willReturn($hash);
         $elpService->method('hasPreview')->willReturn(false);
 
-        $renderer = new ExeLearningRenderer($elpService);
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
 
         $view = new \Laminas\View\Renderer\PhpRenderer();
         $media = new MediaRepresentation(
@@ -572,5 +577,96 @@ class ExeLearningRendererTest extends TestCase
 
         // Should render fallback
         $this->assertStringContainsString('exelearning-fallback', $result);
+    }
+
+    // =========================================================================
+    // buildContentUrl() tests
+    // =========================================================================
+
+    public function testBuildContentUrlIncludesNonStandardPort(): void
+    {
+        $uri = new class extends \Laminas\Uri\Http {
+            public function getPort(): ?int { return 8080; }
+        };
+        $request = new class($uri) extends \Laminas\Http\Request {
+            private $customUri;
+            public function __construct($uri) { $this->customUri = $uri; }
+            public function getUri(): \Laminas\Uri\Http { return $this->customUri; }
+        };
+
+        $renderer = new ExeLearningRenderer($this->elpService, $request);
+
+        $url = $this->callProtectedMethod($renderer, 'buildContentUrl', ['abc123def456789012345678901234567890abcd']);
+
+        $this->assertStringContainsString(':8080', $url);
+        $this->assertStringContainsString('/exelearning/content/abc123def456789012345678901234567890abcd/index.html', $url);
+    }
+
+    public function testBuildContentUrlStripsPlaygroundPrefixFromUriPath(): void
+    {
+        $uri = new class extends \Laminas\Uri\Http {
+            public function getPath(): string { return '/omeka-s-playground/playground/abc123/php83/admin/media/3'; }
+        };
+        $request = new class($uri) extends \Laminas\Http\Request {
+            private $customUri;
+            public function __construct($uri) { $this->customUri = $uri; }
+            public function getUri(): \Laminas\Uri\Http { return $this->customUri; }
+        };
+
+        $renderer = new ExeLearningRenderer($this->elpService, $request);
+        $url = $this->callProtectedMethod($renderer, 'buildContentUrl', ['abc123def456789012345678901234567890abcd']);
+
+        $this->assertStringContainsString('/omeka-s-playground/playground/abc123/php83/exelearning/content/', $url);
+        $this->assertStringNotContainsString('/admin/', $url);
+    }
+
+    public function testExtractBasePathWithAdminRoute(): void
+    {
+        $basePath = $this->callProtectedMethod($this->renderer, 'extractBasePath', ['/playground/uuid/php83/admin/media/3']);
+        $this->assertSame('/playground/uuid/php83', $basePath);
+    }
+
+    public function testExtractBasePathWithPublicRoute(): void
+    {
+        $basePath = $this->callProtectedMethod($this->renderer, 'extractBasePath', ['/playground/uuid/php83/s/mysite/item/1']);
+        $this->assertSame('/playground/uuid/php83', $basePath);
+    }
+
+    public function testExtractBasePathWithNoKnownMarker(): void
+    {
+        $basePath = $this->callProtectedMethod($this->renderer, 'extractBasePath', ['/some/unknown/path']);
+        $this->assertSame('', $basePath);
+    }
+
+    // =========================================================================
+    // isTeacherModeVisible() tests
+    // =========================================================================
+
+    public function testIsTeacherModeVisibleReturnsFalseWhenSetToZero(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '0']
+        );
+
+        $result = $this->callProtectedMethod($this->renderer, 'isTeacherModeVisible', [$media]);
+        $this->assertFalse($result);
+    }
+
+    public function testIsTeacherModeVisibleReturnsTrueWhenSetToOne(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '1']
+        );
+
+        $result = $this->callProtectedMethod($this->renderer, 'isTeacherModeVisible', [$media]);
+        $this->assertTrue($result);
     }
 }

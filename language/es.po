@@ -104,3 +104,107 @@ msgstr "Mostrar botón de edición"
 #: src/Form/ConfigForm.php:39
 msgid "Display the \"Edit in eXeLearning\" button for users with edit permissions."
 msgstr "Mostrar el botón \"Editar en eXeLearning\" para usuarios con permisos de edición."
+
+#: Module.php
+msgid "Embedded Editor"
+msgstr "Editor integrado"
+
+#: Module.php
+msgid "Status"
+msgstr "Estado"
+
+#: Module.php
+msgid "Installed"
+msgstr "Instalado"
+
+#: Module.php
+msgid "installed on"
+msgstr "instalado el"
+
+#: Module.php
+msgid "Update to Latest Version"
+msgstr "Actualizar a la última versión"
+
+#: Module.php
+msgid "Not installed"
+msgstr "No instalado"
+
+#: Module.php
+msgid "The embedded eXeLearning editor is not installed. You can download and install the latest version automatically from GitHub."
+msgstr "El editor integrado de eXeLearning no está instalado. Puedes descargar e instalar la última versión automáticamente desde GitHub."
+
+#: Module.php
+msgid "Download & Install Editor"
+msgstr "Descargar e instalar editor"
+
+#. translators: %s: make build-editor command
+#: Module.php
+#, php-format
+msgid "Developers can also build the editor from source using %s."
+msgstr "Los desarrolladores también pueden compilar el editor desde el código fuente usando %s."
+
+#: src/Controller/EditorController.php
+msgid "The embedded eXeLearning editor is not installed. Please install it from the module configuration page."
+msgstr "El editor integrado de eXeLearning no está instalado. Por favor, instálalo desde la página de configuración del módulo."
+
+#: src/Controller/EditorController.php
+msgid "You do not have permission to install the editor."
+msgstr "No tienes permiso para instalar el editor."
+
+#: src/Controller/EditorController.php
+msgid "Security check failed. Please refresh the page and try again."
+msgstr "La verificación de seguridad falló. Por favor, recarga la página e inténtalo de nuevo."
+
+#. translators: %s: editor version
+#: src/Controller/EditorController.php
+#, php-format
+msgid "eXeLearning editor v%s installed successfully."
+msgstr "Editor de eXeLearning v%s instalado correctamente."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Could not connect to GitHub. Please check your internet connection or install the editor from a release package."
+msgstr "No se pudo conectar a GitHub. Por favor, comprueba tu conexión a internet o instala el editor desde un paquete de release."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Could not parse the latest release information from GitHub."
+msgstr "No se pudo analizar la información de la última versión de GitHub."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Failed to download the editor package. This may happen in browser-based environments. Please install the module from a release package that includes the editor."
+msgstr "Error al descargar el paquete del editor. Esto puede ocurrir en entornos basados en navegador. Por favor, instala el módulo desde un paquete de release que incluya el editor."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "The downloaded file is not a valid ZIP archive."
+msgstr "El archivo descargado no es un archivo ZIP válido."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Could not create temporary directory for extraction."
+msgstr "No se pudo crear el directorio temporal para la extracción."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Failed to open the editor package for extraction."
+msgstr "Error al abrir el paquete del editor para la extracción."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "The downloaded package does not contain the expected editor files. Could not find index.html."
+msgstr "El paquete descargado no contiene los archivos esperados del editor. No se encontró index.html."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "The editor package is missing index.html."
+msgstr "Al paquete del editor le falta index.html."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "The editor package is missing expected asset directories (app, libs, or files)."
+msgstr "Al paquete del editor le faltan los directorios de recursos esperados (app, libs o files)."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Could not create the dist directory."
+msgstr "No se pudo crear el directorio dist."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Could not back up the existing editor installation."
+msgstr "No se pudo hacer copia de seguridad de la instalación actual del editor."
+
+#: src/Service/StaticEditorInstaller.php
+msgid "Failed to copy editor files to the module directory."
+msgstr "Error al copiar los archivos del editor al directorio del módulo."

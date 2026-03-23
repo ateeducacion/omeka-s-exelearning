@@ -12,6 +12,9 @@ return [
         'template_path_stack' => [
             dirname(__DIR__) . '/view',
         ],
+        'strategies' => [
+            'ViewJsonStrategy',
+        ],
     ],
 
     'controllers' => [
@@ -118,6 +121,15 @@ return [
                             ],
                         ],
                     ],
+                    'install-editor' => [
+                        'type' => Literal::class,
+                        'options' => [
+                            'route' => '/install-editor',
+                            'defaults' => [
+                                'action' => 'installEditor',
+                            ],
+                        ],
+                    ],
                 ],
             ],
             'admin' => [
@@ -134,6 +146,17 @@ return [
                                 '__NAMESPACE__' => 'ExeLearning\Controller',
                                 'controller' => 'Editor',
                                 'action' => 'index',
+                            ],
+                        ],
+                    ],
+                    'exelearning-install' => [
+                        'type' => Literal::class,
+                        'options' => [
+                            'route' => '/exelearning/install-editor',
+                            'defaults' => [
+                                '__NAMESPACE__' => 'ExeLearning\Controller',
+                                'controller' => 'Editor',
+                                'action' => 'installEditor',
                             ],
                         ],
                     ],

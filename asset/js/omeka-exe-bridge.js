@@ -162,8 +162,11 @@
             var bridge = await waitForBridge();
 
             // Fetch the ELP file
+            // Use cache: 'no-cache' to force revalidation with the server.
+            // Without this, the browser may serve a stale cached version after
+            // the file is updated on the server (heuristic caching).
             updateLoadScreen('Downloading file...');
-            var response = await fetch(elpUrl);
+            var response = await fetch(elpUrl, { cache: 'no-cache' });
             if (!response.ok) {
                 throw new Error('HTTP ' + response.status + ': ' + response.statusText);
             }
@@ -257,19 +260,21 @@
 
             console.log('[Omeka-EXE Bridge] Export complete, size:', blob.size);
 
-            // Upload to Omeka-S
-            var formData = new FormData();
-            formData.append('file', blob, 'project.elpx');
-            if (config.csrfToken) {
-                formData.append('csrf', config.csrfToken);
-            }
-
+            // Upload to Omeka-S.
+            // Use raw binary body — this works in both standard PHP and php-wasm
+            // (where multipart/FormData file uploads may not populate $_FILES).
             console.log('[Omeka-EXE Bridge] Uploading to:', config.saveEndpoint);
+
+            var saveHeaders = { 'Content-Type': 'application/octet-stream' };
+            if (config.csrfToken) {
+                saveHeaders['X-CSRF-Token'] = config.csrfToken;
+            }
 
             var saveResponse = await fetch(config.saveEndpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
-                body: formData
+                headers: saveHeaders,
+                body: blob
             });
 
             var saveResult = await saveResponse.json();
@@ -283,7 +288,7 @@
                     window.parent.postMessage({
                         type: 'exelearning-save-complete',
                         mediaId: config.mediaId,
-                        previewUrl: saveResult.preview_url
+                        contentPath: saveResult.contentPath
                     }, '*');
                 }
             } else {

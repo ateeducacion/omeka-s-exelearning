@@ -14,19 +14,26 @@ class ElpFileServiceFactory implements FactoryInterface
         $entityManager = $services->get('Omeka\EntityManager');
         $logger = $services->get('Omeka\Logger');
 
-        // Get Omeka files path from the file store configuration
-        $fileStore = $services->get('Omeka\File\Store');
-
-        // Try to get the base path from the local file store
         $filesPath = null;
-        if (method_exists($fileStore, 'getLocalPath')) {
-            $filesPath = dirname($fileStore->getLocalPath(''));
-        }
 
-        // Fallback: try config
-        if (!$filesPath) {
+        // Try config first (most reliable, works in Playground too)
+        try {
             $config = $services->get('Config');
             $filesPath = $config['file_store']['local']['base_path'] ?? null;
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
+        // Try the file store service
+        if (!$filesPath) {
+            try {
+                $fileStore = $services->get('Omeka\File\Store');
+                if (method_exists($fileStore, 'getLocalPath')) {
+                    $filesPath = dirname($fileStore->getLocalPath(''));
+                }
+            } catch (\Throwable $e) {
+                // ignore - file store may not be available in Playground
+            }
         }
 
         // Fallback: use OMEKA_PATH
@@ -35,7 +42,6 @@ class ElpFileServiceFactory implements FactoryInterface
         }
 
         // In Docker with volume, files are typically in /var/www/html/volume/files
-        // Check if that path exists and use it instead
         $volumePath = '/var/www/html/volume/files';
         if (is_dir($volumePath)) {
             $filesPath = $volumePath;
@@ -43,8 +49,6 @@ class ElpFileServiceFactory implements FactoryInterface
 
         // Extracted eXeLearning content goes in /files/exelearning/
         $basePath = $filesPath . '/exelearning';
-
-        $logger->info(sprintf('[ExeLearning] ElpFileService initialized with basePath=%s, filesPath=%s', $basePath, $filesPath));
 
         return new ElpFileService($api, $entityManager, $basePath, $filesPath, $logger);
     }

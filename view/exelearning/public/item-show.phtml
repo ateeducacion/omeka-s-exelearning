@@ -4,7 +4,7 @@
  *
  * @var \Laminas\View\Renderer\PhpRenderer $this
  * @var \Omeka\Api\Representation\MediaRepresentation $media
- * @var string $previewUrl
+ * @var string $contentPath  Relative path: /exelearning/content/{hash}/index.html
  */
 ?>
 
@@ -57,7 +57,7 @@
     <div class="viewer-header">
         <h3 class="viewer-title"><?= $this->escapeHtml($media->displayTitle()) ?></h3>
         <div class="viewer-actions">
-            <a href="<?= $this->escapeHtmlAttr($previewUrl) ?>" target="_blank">
+            <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank">
                 <?= $this->translate('Open fullscreen') ?>
             </a>
             <a href="<?= $this->escapeHtmlAttr($media->originalUrl()) ?>" download="<?= $this->escapeHtmlAttr($media->source()) ?>">
@@ -66,8 +66,27 @@
         </div>
     </div>
     <iframe
-        src="<?= $this->escapeHtmlAttr($previewUrl) ?>"
-        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>
+
+<script>
+// Build content URLs using window.location so the playground SW scope prefix
+// (/playground/{uuid}/php83/) is included — PHP cannot see it, JS can.
+(function() {
+    var href = window.location.href;
+    var base = href;
+    ['/admin/', '/s/', '/api/'].some(function(m) {
+        var idx = href.indexOf(m);
+        if (idx !== -1) { base = href.substring(0, idx); return true; }
+        return false;
+    });
+    window.exelearningContentBase = base;
+    document.querySelectorAll('[data-exe-content-path]').forEach(function(el) {
+        var url = base + el.getAttribute('data-exe-content-path');
+        el.tagName === 'IFRAME' ? (el.src = url) : (el.href = url);
+    });
+})();
+</script>

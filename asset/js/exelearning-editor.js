@@ -330,11 +330,17 @@
          * @param {object} data The message data.
          */
         onSaveComplete: function(data) {
-            // Destroy the iframe to prevent beforeunload dialog
-            this.destroyIframe();
-
-            // Reload the page to show updated content
-            window.location.reload();
+            // Update the admin preview iframe with the new content URL.
+            // Use window.exelearningContentBase (set by the page's inline script)
+            // to prepend the correct base including the playground SW scope prefix.
+            var previewIframe = document.querySelector('.preview-iframe');
+            if (data.contentPath && previewIframe) {
+                var base = window.exelearningContentBase || window.location.origin;
+                previewIframe.src = base + data.contentPath;
+            }
+            // Always close the modal after a successful save — avoid
+            // window.location.reload() which 404s in PHP-WASM playground.
+            this.close();
         }
     };
 

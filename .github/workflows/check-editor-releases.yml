@@ -82,6 +82,15 @@ jobs:
           git commit -m "Update editor version to ${{ steps.check.outputs.tag }}"
           git push
 
+      - name: Build Playground URL for this release
+        if: steps.check.outputs.found == 'true'
+        id: playground
+        run: |
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/ExeLearning-${{ steps.version.outputs.version }}.zip"
+          BLUEPRINT=$(jq --arg url "$RELEASE_URL" '.modules[0].source.url = $url' blueprint.json)
+          ENCODED=$(echo "$BLUEPRINT" | base64 -w 0 | tr '+/' '-_' | tr -d '=')
+          echo "url=https://ateeducacion.github.io/omeka-s-playground/?blueprint-data=${ENCODED}" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         if: steps.check.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
@@ -90,6 +99,10 @@ jobs:
           name: "${{ steps.version.outputs.tag }}"
           body: |
             Automated build with eXeLearning editor ${{ steps.version.outputs.tag }}.
+
+            ---
+
+            <a href="${{ steps.playground.outputs.url }}"><img src="https://raw.githubusercontent.com/ateeducacion/omeka-s-playground/main/ogimage.png" alt="Try in Omeka-S Playground" width="220"></a>
           files: ExeLearning-${{ steps.version.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

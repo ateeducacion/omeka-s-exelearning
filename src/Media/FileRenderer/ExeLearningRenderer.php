@@ -18,12 +18,17 @@ class ExeLearningRenderer implements RendererInterface
     /** @var ElpFileService */
     protected $elpService;
 
+    /** @var \Laminas\Http\Request */
+    protected $request;
+
     /**
      * @param ElpFileService $elpService
+     * @param \Laminas\Http\Request $request
      */
-    public function __construct(ElpFileService $elpService)
+    public function __construct(ElpFileService $elpService, \Laminas\Http\Request $request)
     {
         $this->elpService = $elpService;
+        $this->request = $request;
     }
 
     /**
@@ -50,17 +55,18 @@ class ExeLearningRenderer implements RendererInterface
             if (!$hash || !$hasPreview) {
                 return $this->renderFallback($view, $media);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $this->renderFallback($view, $media);
         }
 
         // Get configuration
         $config = $this->getConfig($view);
 
-        // Build secure preview URL via proxy controller
-        $previewUrl = $view->url('exelearning-content', ['hash' => $hash, 'file' => 'index.html']);
+        // Relative path; JS constructs the full URL from window.location so the
+        // playground SW scope prefix is always included (PHP cannot see it).
+        $contentPath = '/exelearning/content/' . $hash . '/index.html';
         if (!$this->isTeacherModeVisible($media)) {
-            $previewUrl .= '?teacher_mode_visible=0';
+            $contentPath .= '?teacher_mode_visible=0';
         }
 
         // Load assets
@@ -70,6 +76,8 @@ class ExeLearningRenderer implements RendererInterface
         $view->headScript()->appendFile(
             $view->assetUrl('js/exelearning-viewer.js', 'ExeLearning')
         );
+
+        $iframeId = 'exelearning-iframe-' . $media->id();
 
         // Build HTML
         $html = '<div class="exelearning-viewer" data-media-id="' . $media->id() . '">';
@@ -88,7 +96,7 @@ class ExeLearningRenderer implements RendererInterface
 
         // Fullscreen button
         $html .= '<button type="button" class="button exelearning-fullscreen-btn" ';
-        $html .= 'data-target="exelearning-iframe-' . $media->id() . '">';
+        $html .= 'data-target="' . $iframeId . '">';
         $html .= '<span class="icon-fullscreen"></span> ';
         $html .= $view->translate('Fullscreen');
         $html .= '</button>';
@@ -109,24 +117,25 @@ class ExeLearningRenderer implements RendererInterface
         $html .= '</div>'; // toolbar-actions
         $html .= '</div>'; // toolbar
 
-        // Iframe with security sandbox
-        // sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" prevents:
-        // - Access to parent page DOM
-        // - Access to cookies/localStorage from parent origin
-        // - Form submissions to external sites
-        // - Running plugins
-        // While allowing:
-        // - JavaScript execution (needed for eXeLearning interactivity)
-        // - Opening popups for external links
+        // Iframe — src is set by inline JS so the playground SW scope prefix
+        // from window.location is correctly prepended to the content path.
         $html .= '<iframe ';
-        $html .= 'id="exelearning-iframe-' . $media->id() . '" ';
-        $html .= 'src="' . $view->escapeHtmlAttr($previewUrl) . '" ';
+        $html .= 'id="' . $iframeId . '" ';
+        $html .= 'data-exe-content-path="' . $view->escapeHtmlAttr($contentPath) . '" ';
         $html .= 'class="exelearning-iframe" ';
         $html .= 'style="width: 100%; height: ' . (int) $config['height'] . 'px; border: none;" ';
         $html .= 'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" ';
         $html .= 'referrerpolicy="no-referrer" ';
         $html .= 'allowfullscreen>';
         $html .= '</iframe>';
+
+        $html .= '<script>(function(){';
+        $html .= 'var h=window.location.href,b=h;';
+        $html .= '["/admin/","/s/","/api/"].some(function(m){var i=h.indexOf(m);if(i!==-1){b=h.substring(0,i);return true;}return false;});';
+        $html .= 'window.exelearningContentBase=b;';
+        $html .= 'var el=document.getElementById("' . $iframeId . '");';
+        $html .= 'if(el)el.src=b+el.getAttribute("data-exe-content-path");';
+        $html .= '})();</script>';
 
         $html .= '</div>'; // exelearning-viewer
 
@@ -180,11 +189,42 @@ class ExeLearningRenderer implements RendererInterface
     }
 
     /**
-     * Check if media is an eXeLearning file.
+     * Build an absolute content proxy URL for the given hash.
      *
-     * @param MediaRepresentation $media
-     * @return bool
+     * Derives the base path from the actual request URI path so that the
+     * playground prefix (/playground/{uuid}/php83/) is correctly included
+     * even in PHP-WASM environments where getBasePath() is unreliable.
      */
+    protected function buildContentUrl(string $hash): string
+    {
+        $uri = $this->request->getUri();
+        $scheme = $uri->getScheme();
+        $port = $uri->getPort();
+        $serverUrl = $scheme . '://' . $uri->getHost();
+        if ($port && !(($scheme === 'http' && $port == 80) || ($scheme === 'https' && $port == 443))) {
+            $serverUrl .= ':' . $port;
+        }
+        $basePath = $this->extractBasePath($uri->getPath());
+        return $serverUrl . $basePath . '/exelearning/content/' . $hash . '/index.html';
+    }
+
+    /**
+     * Derive the Omeka base path from the actual request URI path.
+     *
+     * Strips everything from the first known Omeka route segment onward.
+     * Reliable in PHP-WASM where the full URL path is preserved in the URI.
+     */
+    protected function extractBasePath(string $uriPath): string
+    {
+        foreach (['/admin/', '/s/', '/api/'] as $marker) {
+            $pos = strpos($uriPath, $marker);
+            if ($pos !== false) {
+                return substr($uriPath, 0, $pos);
+            }
+        }
+        return '';
+    }
+
     /**
      * Determine whether teacher mode toggler should be visible.
      */

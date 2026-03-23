@@ -4,18 +4,21 @@
  *
  * @var \Laminas\View\Renderer\PhpRenderer $this
  * @var \Omeka\Api\Representation\MediaRepresentation $media
- * @var string $previewUrl
+ * @var string $contentPath  Relative path: /exelearning/content/{hash}/index.html
  */
 
-// Check if user can edit this media
+// Check if user can edit this media and if the editor is installed
 $canEdit = $this->identity() && $this->userIsAllowed('Omeka\Entity\Media', 'update');
+$editorInstalled = \ExeLearning\Service\StaticEditorInstaller::isEditorInstalled();
 
 $editUrl = $this->url('admin/exelearning-editor', ['action' => 'edit', 'id' => $media->id()]);
 $mediaId = $media->id();
 
-// Load modal assets
-$this->headLink()->appendStylesheet($this->assetUrl('css/exelearning-editor.css', 'ExeLearning'));
-$this->headScript()->appendFile($this->assetUrl('js/exelearning-editor.js', 'ExeLearning'));
+// Load modal assets only when editor is available
+if ($canEdit && $editorInstalled) {
+    $this->headLink()->appendStylesheet($this->assetUrl('css/exelearning-editor.css', 'ExeLearning'));
+    $this->headScript()->appendFile($this->assetUrl('js/exelearning-editor.js', 'ExeLearning'));
+}
 ?>
 
 <style>
@@ -69,7 +72,7 @@ $this->headScript()->appendFile($this->assetUrl('js/exelearning-editor.js', 'Exe
 <div class="exelearning-admin-viewer">
     <h4><?= $this->translate('eXeLearning Preview') ?></h4>
     <div class="viewer-controls">
-        <a href="<?= $this->escapeHtmlAttr($previewUrl) ?>" target="_blank" class="button">
+        <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank" class="button" id="exe-open-tab-link">
             <span class="o-icon-external" aria-hidden="true"></span>
             <?= $this->translate('Open in new tab') ?>
         </a>
@@ -79,22 +82,47 @@ $this->headScript()->appendFile($this->assetUrl('js/exelearning-editor.js', 'Exe
         </a>
 
         <div style="margin-left:auto;"></div>
-        <?php if ($canEdit): ?>
+        <?php if ($canEdit && $editorInstalled): ?>
         <button type="button" class="edit-btn"
                 onclick="ExeLearningEditor.open(<?= $mediaId ?>, '<?= $this->escapeJs($editUrl) ?>')">
             <span class="o-icon-edit" aria-hidden="true"></span>
             <?= $this->translate('Edit in eXeLearning') ?>
         </button>
+        <?php elseif ($canEdit): ?>
+        <a href="<?= $this->escapeHtmlAttr($this->url('admin/default', ['controller' => 'module', 'action' => 'configure'], ['query' => ['id' => 'ExeLearning']])) ?>" class="button">
+            <span class="o-icon-install" aria-hidden="true"></span>
+            <?= $this->translate('Install Editor') ?>
+        </a>
         <?php endif; ?>
     </div>
     <iframe
         class="preview-iframe"
-        src="<?= $this->escapeHtmlAttr($previewUrl) ?>"
-        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>
 
+<script>
+// Build content URLs using window.location so the playground SW scope prefix
+// (/playground/{uuid}/php83/) is included — PHP cannot see it, JS can.
+(function() {
+    var href = window.location.href;
+    var base = href;
+    ['/admin/', '/s/', '/api/'].some(function(m) {
+        var idx = href.indexOf(m);
+        if (idx !== -1) { base = href.substring(0, idx); return true; }
+        return false;
+    });
+    window.exelearningContentBase = base;
+    document.querySelectorAll('[data-exe-content-path]').forEach(function(el) {
+        var url = base + el.getAttribute('data-exe-content-path');
+        el.tagName === 'IFRAME' ? (el.src = url) : (el.href = url);
+    });
+})();
+</script>
+
+<?php if ($canEdit && $editorInstalled): ?>
 <!-- eXeLearning Editor Modal -->
 <div id="exelearning-editor-modal" class="exelearning-editor-modal">
     <div class="exelearning-editor-header">
@@ -115,7 +143,6 @@ $this->headScript()->appendFile($this->assetUrl('js/exelearning-editor.js', 'Exe
 </div>
 
 <script>
-// i18n strings for the editor JS
 window.exelearningEditorI18n = {
     saving: <?= json_encode($this->translate('Saving...')) ?>,
     saveButton: <?= json_encode($this->translate('Save to Omeka')) ?>,
@@ -133,3 +160,4 @@ window.exelearningEditorI18n = {
     });
 })();
 </script>
+<?php endif; ?>

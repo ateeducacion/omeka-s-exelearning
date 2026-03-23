@@ -11,26 +11,9 @@
  * @var string $editorBaseUrl
  */
 
-// Check if static editor exists
+// Load editor template from local dist.
 $staticIndex = dirname(__DIR__, 2) . '/dist/static/index.html';
-if (!file_exists($staticIndex)) {
-    $isDevInstall = ('0.0.0' === ($config['version'] ?? '0.0.0'));
-    echo '<h1>Error</h1>';
-    if ($isDevInstall) {
-        echo '<p>eXeLearning editor not found. You appear to have cloned this repository directly.</p>';
-        echo '<p>Please either:</p>';
-        echo '<ol>';
-        echo '<li>Download the module from <a href="https://github.com/ateeducacion/omeka-s-exelearning/releases">GitHub Releases</a></li>';
-        echo '<li>Build the editor with: <code>make build-editor</code></li>';
-        echo '</ol>';
-    } else {
-        echo '<p>eXeLearning editor files are missing. Please reinstall the module from the official release.</p>';
-    }
-    return;
-}
-
-// Load the static index.html
-$template = file_get_contents($staticIndex);
+$template = file_exists($staticIndex) ? file_get_contents($staticIndex) : false;
 
 if (empty($template)) {
     echo '<h1>Error</h1>';
@@ -48,6 +31,26 @@ $configScript = <<<SCRIPT
     <script>
         // Omeka S Integration Configuration
         window.__OMEKA_EXE_CONFIG__ = {$configJson};
+
+        // Fix URL fields for playground environments where PHP cannot see the
+        // SW scope prefix (/playground/{uuid}/php83/).  window.location inside
+        // this iframe contains the full URL, so we can derive the correct base.
+        (function() {
+            var cfg = window.__OMEKA_EXE_CONFIG__;
+            if (!cfg) return;
+            var href = window.location.href;
+            var base = href;
+            ['/admin/', '/s/', '/api/'].some(function(m) {
+                var idx = href.indexOf(m);
+                if (idx !== -1) { base = href.substring(0, idx); return true; }
+                return false;
+            });
+            // Fix saveEndpoint (must go through the playground PHP context)
+            if (cfg.saveEndpoint) {
+                var m = cfg.saveEndpoint.match(/\/api\/exelearning\/.+/);
+                if (m) cfg.saveEndpoint = base + m[0];
+            }
+        })();
 
         // Override static mode detection for Omeka S
         window.__EXE_STATIC_MODE__ = true;
@@ -68,18 +71,15 @@ $configScript = <<<SCRIPT
             },
         };
 
-        // Disable Service Worker in Omeka mode to prevent path conflicts
+        // Disable NEW service worker registrations from inside the editor to
+        // prevent the editor's own SW from conflicting with the playground's
+        // PHP-WASM SW.  Do NOT unregister existing SWs — the playground SW is
+        // shared across all frames and killing it would break parent navigation.
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.register = function() {
                 console.log("[Omeka Mode] Service worker registration disabled");
                 return Promise.resolve({ scope: "" });
             };
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                registrations.forEach(function(registration) {
-                    registration.unregister();
-                    console.log("[Omeka Mode] Service worker unregistered");
-                });
-            });
         }
 
         // Handle CSS/JS 404 errors gracefully
@@ -156,7 +156,9 @@ SCRIPT;
 
 // Get the correct module base URL for assets (without dist/static)
 $moduleBaseUrl = dirname(dirname($editorBaseUrl));
-$bridgeScript = '<script src="' . htmlspecialchars($moduleBaseUrl, ENT_QUOTES, 'UTF-8') . '/asset/js/omeka-exe-bridge.js"></script>';
+$bridgeJsPath = dirname(__DIR__, 2) . '/asset/js/omeka-exe-bridge.js';
+$bridgeVersion = file_exists($bridgeJsPath) ? filemtime($bridgeJsPath) : time();
+$bridgeScript = '<script src="' . htmlspecialchars($moduleBaseUrl, ENT_QUOTES, 'UTF-8') . '/asset/js/omeka-exe-bridge.js?v=' . $bridgeVersion . '"></script>';
 
 // Omeka-specific styles
 $omekaStyles = <<<STYLES

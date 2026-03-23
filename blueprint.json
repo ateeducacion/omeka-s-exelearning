@@ -23,7 +23,7 @@
       "state": "activate",
       "source": {
         "type": "url",
-        "url": "https://github.com/exelearning/omeka-s-exelearning/releases/download/v4.0.0-beta2/ExeLearning-4.0.0-beta2.zip"
+        "url": "https://github.com/exelearning/omeka-s-exelearning/archive/refs/heads/main.zip"
       }
     }
   ],

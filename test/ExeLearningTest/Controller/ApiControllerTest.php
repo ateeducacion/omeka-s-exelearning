@@ -498,6 +498,8 @@ class ApiControllerTest extends TestCase
             public function getFiles() {
                 return ['file' => ['error' => UPLOAD_ERR_OK, 'tmp_name' => '/tmp/test.elpx']];
             }
+            public function getUri() { return new \Laminas\Uri\Http(); }
+            public function getBasePath(): string { return ''; }
         };
 
         $identity = new class {
@@ -527,7 +529,8 @@ class ApiControllerTest extends TestCase
         $this->assertTrue($result->getVariables()['success']);
         $this->assertEquals('File saved successfully', $result->getVariables()['message']);
         $this->assertEquals(123, $result->getVariables()['media_id']);
-        $this->assertNotNull($result->getVariables()['preview_url']);
+        $this->assertNotNull($result->getVariables()['contentPath']);
+        $this->assertStringContainsString('/exelearning/content/', $result->getVariables()['contentPath']);
     }
 
     public function testSaveActionSuccessWithoutPreview(): void
@@ -570,7 +573,7 @@ class ApiControllerTest extends TestCase
 
         $this->assertInstanceOf(JsonModel::class, $result);
         $this->assertTrue($result->getVariables()['success']);
-        $this->assertNull($result->getVariables()['preview_url']);
+        $this->assertNull($result->getVariables()['contentPath']);
     }
 
     public function testSaveActionReturns500OnException(): void
@@ -648,7 +651,8 @@ class ApiControllerTest extends TestCase
         $this->assertEquals('Test ELP', $result->getVariables()['title']);
         $this->assertEquals('test.elpx', $result->getVariables()['filename']);
         $this->assertTrue($result->getVariables()['hasPreview']);
-        $this->assertNotNull($result->getVariables()['previewUrl']);
+        $this->assertNotNull($result->getVariables()['contentPath']);
+        $this->assertStringContainsString('/exelearning/content/', $result->getVariables()['contentPath']);
     }
 
     public function testGetDataActionSuccessWithoutPreview(): void
@@ -673,7 +677,7 @@ class ApiControllerTest extends TestCase
         $this->assertInstanceOf(JsonModel::class, $result);
         $this->assertTrue($result->getVariables()['success']);
         $this->assertFalse($result->getVariables()['hasPreview']);
-        $this->assertNull($result->getVariables()['previewUrl']);
+        $this->assertNull($result->getVariables()['contentPath']);
     }
 
     public function testGetDataActionWithEmptyHash(): void
@@ -696,8 +700,8 @@ class ApiControllerTest extends TestCase
         $result = $this->controller->getDataAction();
 
         $this->assertInstanceOf(JsonModel::class, $result);
-        // Empty hash is falsy, so previewUrl should be null
-        $this->assertNull($result->getVariables()['previewUrl']);
+        // Empty hash is falsy, so contentPath should be null
+        $this->assertNull($result->getVariables()['contentPath']);
     }
 
     // =========================================================================
@@ -1003,6 +1007,269 @@ class ApiControllerTest extends TestCase
         $this->assertFalse($result->getVariables()['teacherModeVisible']);
     }
 
+    // =========================================================================
+    // installEditorAction() tests
+    // =========================================================================
+
+    public function testInstallEditorActionRequiresPostMethod(): void
+    {
+        $request = new class {
+            public function isPost(): bool { return false; }
+        };
+
+        $this->controller->setRequest($request);
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $this->assertEquals(405, $this->controller->getResponse()->getStatusCode());
+        $this->assertEquals('Method not allowed', $result->getVariables()['message']);
+    }
+
+    public function testInstallEditorActionRequiresAuthentication(): void
+    {
+        $request = new class {
+            public function isPost(): bool { return true; }
+        };
+
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity(null);
+
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $this->assertEquals(401, $this->controller->getResponse()->getStatusCode());
+        $this->assertEquals('Unauthorized', $result->getVariables()['message']);
+    }
+
+    public function testInstallEditorActionRequiresPermission(): void
+    {
+        $request = new class {
+            public function isPost(): bool { return true; }
+            public function getPost($key = null) { return null; }
+            public function getHeaders() {
+                return new class {
+                    public function get($name) { return null; }
+                };
+            }
+            public function getFiles() { return []; }
+        };
+
+        $identity = new class {
+            public function getId(): int { return 1; }
+            public function getName(): string { return 'Test User'; }
+        };
+
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity($identity);
+        $this->controller->setUserAllowed(false);
+
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $this->assertEquals(403, $this->controller->getResponse()->getStatusCode());
+        $this->assertEquals('Forbidden', $result->getVariables()['message']);
+    }
+
+    public function testInstallEditorActionWithUploadedZip(): void
+    {
+        // Create a valid ZIP with editor contents
+        $tmpZip = tempnam(sys_get_temp_dir(), 'test-editor-');
+        $zip = new \ZipArchive();
+        $zip->open($tmpZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('index.html', '<html><body>Editor</body></html>');
+        $zip->addEmptyDir('app');
+        $zip->close();
+
+        $request = new class($tmpZip) {
+            private string $tmpZip;
+            public function __construct(string $tmpZip)
+            {
+                $this->tmpZip = $tmpZip;
+            }
+            public function isPost(): bool { return true; }
+            public function getPost($key = null, $default = null)
+            {
+                if ($key === 'version') {
+                    return '4.0.0-test';
+                }
+                return $default;
+            }
+            public function getHeaders() {
+                return new class {
+                    public function get($name) { return null; }
+                };
+            }
+            public function getFiles() {
+                return ['file' => [
+                    'error' => UPLOAD_ERR_OK,
+                    'tmp_name' => $this->tmpZip,
+                ]];
+            }
+        };
+
+        $identity = new class {
+            public function getId(): int { return 1; }
+            public function getName(): string { return 'Admin'; }
+        };
+
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity($identity);
+        $this->controller->setUserAllowed(true);
+
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $vars = $result->getVariables();
+        $this->assertTrue($vars['success']);
+        $this->assertEquals('4.0.0-test', $vars['version']);
+        $this->assertStringContainsString('4.0.0-test', $vars['message']);
+
+        // Clean up installed files
+        $editorPath = \ExeLearning\Service\StaticEditorInstaller::getEditorPath();
+        if (is_dir($editorPath)) {
+            $installer = new \ExeLearning\Service\StaticEditorInstaller();
+            $installer->cleanupDirectory($editorPath);
+        }
+        @unlink($tmpZip);
+    }
+
+    public function testInstallEditorActionWithInvalidZip(): void
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'test-bad-');
+        file_put_contents($tmpFile, 'This is not a ZIP');
+
+        $request = new class($tmpFile) {
+            private string $tmpFile;
+            public function __construct(string $tmpFile)
+            {
+                $this->tmpFile = $tmpFile;
+            }
+            public function isPost(): bool { return true; }
+            public function getPost($key = null, $default = null)
+            {
+                return $default;
+            }
+            public function getHeaders() {
+                return new class {
+                    public function get($name) { return null; }
+                };
+            }
+            public function getFiles() {
+                return ['file' => [
+                    'error' => UPLOAD_ERR_OK,
+                    'tmp_name' => $this->tmpFile,
+                ]];
+            }
+        };
+
+        $identity = new class {
+            public function getId(): int { return 1; }
+            public function getName(): string { return 'Admin'; }
+        };
+
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity($identity);
+        $this->controller->setUserAllowed(true);
+
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $this->assertEquals(500, $this->controller->getResponse()->getStatusCode());
+        $this->assertStringContainsString('not a valid ZIP', $result->getVariables()['message']);
+
+        @unlink($tmpFile);
+    }
+
+    public function testInstallEditorActionWithZipMissingAssetDirs(): void
+    {
+        // Upload a valid ZIP but missing required asset directories
+        $tmpZip = tempnam(sys_get_temp_dir(), 'test-editor-');
+        $zip = new \ZipArchive();
+        $zip->open($tmpZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('index.html', '<html></html>');
+        $zip->close();
+
+        $request = new class($tmpZip) {
+            private string $tmpZip;
+            public function __construct(string $tmpZip)
+            {
+                $this->tmpZip = $tmpZip;
+            }
+            public function isPost(): bool { return true; }
+            public function getPost($key = null, $default = null) { return $default; }
+            public function getHeaders() {
+                return new class {
+                    public function get($name) { return null; }
+                };
+            }
+            public function getFiles() {
+                return ['file' => [
+                    'error' => UPLOAD_ERR_OK,
+                    'tmp_name' => $this->tmpZip,
+                ]];
+            }
+        };
+
+        $identity = new class {
+            public function getId(): int { return 1; }
+            public function getName(): string { return 'Admin'; }
+        };
+
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity($identity);
+        $this->controller->setUserAllowed(true);
+
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $this->assertEquals(500, $this->controller->getResponse()->getStatusCode());
+        $this->assertStringContainsString('missing expected asset directories', $result->getVariables()['message']);
+
+        @unlink($tmpZip);
+    }
+
+    public function testInstallEditorActionHasMethod(): void
+    {
+        $this->assertTrue(method_exists($this->controller, 'installEditorAction'));
+    }
+
+    public function testInstallEditorActionWithInvalidDownloadUrl(): void
+    {
+        $request = new class {
+            public function isPost(): bool { return true; }
+            public function getPost($key = null, $default = null)
+            {
+                $data = [
+                    'download_url' => 'https://invalid.example.com/nonexistent.zip',
+                    'version' => '1.0.0',
+                ];
+                if ($key === null) return $default;
+                return $data[$key] ?? $default;
+            }
+            public function getHeaders() {
+                return new class {
+                    public function get($name) { return null; }
+                };
+            }
+            public function getFiles() { return []; }
+        };
+
+        $identity = new class {
+            public function getId(): int { return 1; }
+            public function getName(): string { return 'Admin'; }
+        };
+
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity($identity);
+        $this->controller->setUserAllowed(true);
+
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $this->assertEquals(500, $this->controller->getResponse()->getStatusCode());
+        $this->assertFalse($result->getVariables()['success']);
+    }
+
     public function testSetTeacherModeActionWithNoString(): void
     {
         $request = new class {
@@ -1041,5 +1308,65 @@ class ApiControllerTest extends TestCase
 
         $this->assertTrue($result->getVariables()['success']);
         $this->assertFalse($result->getVariables()['teacherModeVisible']);
+    }
+
+    // =========================================================================
+    // buildContentUrl() tests
+    // =========================================================================
+
+    public function testBuildContentUrlIncludesNonStandardPort(): void
+    {
+        $uri = new class extends \Laminas\Uri\Http {
+            public function getPort(): ?int { return 8080; }
+        };
+        $request = new class($uri) extends \Laminas\Http\Request {
+            private $customUri;
+            public function __construct($uri) { $this->customUri = $uri; }
+            public function getUri(): \Laminas\Uri\Http { return $this->customUri; }
+        };
+
+        $this->controller->setRequest($request);
+
+        $url = $this->callProtectedMethod($this->controller, 'buildContentUrl', ['abc123def456789012345678901234567890abcd']);
+
+        $this->assertStringContainsString(':8080', $url);
+        $this->assertStringContainsString('/exelearning/content/abc123def456789012345678901234567890abcd/index.html', $url);
+    }
+
+    public function testBuildContentUrlStripsPlaygroundPrefixFromUriPath(): void
+    {
+        $uri = new class extends \Laminas\Uri\Http {
+            public function getPath(): string { return '/omeka-s-playground/playground/abc123/php83/admin/media/3'; }
+        };
+        $request = new class($uri) extends \Laminas\Http\Request {
+            private $customUri;
+            public function __construct($uri) { $this->customUri = $uri; }
+            public function getUri(): \Laminas\Uri\Http { return $this->customUri; }
+        };
+
+        $this->controller->setRequest($request);
+
+        $url = $this->callProtectedMethod($this->controller, 'buildContentUrl', ['abc123def456789012345678901234567890abcd']);
+
+        $this->assertStringContainsString('/omeka-s-playground/playground/abc123/php83/exelearning/content/', $url);
+        $this->assertStringNotContainsString('/admin/', $url);
+    }
+
+    public function testExtractBasePathWithAdminRoute(): void
+    {
+        $basePath = $this->callProtectedMethod($this->controller, 'extractBasePath', ['/playground/uuid/php83/admin/media/3']);
+        $this->assertSame('/playground/uuid/php83', $basePath);
+    }
+
+    public function testExtractBasePathWithApiRoute(): void
+    {
+        $basePath = $this->callProtectedMethod($this->controller, 'extractBasePath', ['/playground/uuid/php83/api/exelearning/save/1']);
+        $this->assertSame('/playground/uuid/php83', $basePath);
+    }
+
+    public function testExtractBasePathWithNoKnownMarker(): void
+    {
+        $basePath = $this->callProtectedMethod($this->controller, 'extractBasePath', ['/some/unknown/path']);
+        $this->assertSame('', $basePath);
     }
 }
