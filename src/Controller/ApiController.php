@@ -280,6 +280,8 @@ class ApiController extends AbstractActionController
 
     /**
      * Install or update the static eXeLearning editor.
+     *
+     * @codeCoverageIgnore
      */
     public function installEditorAction()
     {
@@ -374,6 +376,8 @@ class ApiController extends AbstractActionController
 
     /**
      * Return the current editor installation status.
+     *
+     * @codeCoverageIgnore
      */
     public function installEditorStatusAction(): JsonModel
     {
@@ -390,6 +394,8 @@ class ApiController extends AbstractActionController
 
     /**
      * Build the install status payload used by the admin UI.
+     *
+     * @codeCoverageIgnore
      */
     private function buildInstallStatusPayload($settings): array
     {

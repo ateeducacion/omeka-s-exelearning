@@ -201,6 +201,83 @@ class StaticEditorInstallerTest extends TestCase
         $this->assertEquals('exelearning_editor_installed_at', StaticEditorInstaller::SETTING_INSTALLED_AT);
     }
 
+    public function testStoreAndReadInstallStatus(): void
+    {
+        $settings = new class {
+            private array $store = [];
+            public function set(string $key, $value): void { $this->store[$key] = $value; }
+            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
+        };
+
+        StaticEditorInstaller::storeInstallStatus($settings, 'downloading', 'Downloading editor...', [
+            'target_version' => '4.0.0-beta3',
+            'started_at' => time(),
+            'success' => false,
+            'error' => '',
+        ]);
+
+        $status = StaticEditorInstaller::getStoredInstallStatus($settings);
+
+        $this->assertSame('downloading', $status['phase']);
+        $this->assertSame('Downloading editor...', $status['message']);
+        $this->assertSame('4.0.0-beta3', $status['target_version']);
+        $this->assertTrue($status['running']);
+        $this->assertFalse($status['stale']);
+    }
+
+    public function testStoredInstallStatusDetectsStaleLock(): void
+    {
+        $settings = new class {
+            private array $store = [];
+            public function set(string $key, $value): void { $this->store[$key] = $value; }
+            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
+        };
+
+        StaticEditorInstaller::storeInstallStatus($settings, 'installing', 'Installing editor...', [
+            'started_at' => time() - (StaticEditorInstaller::INSTALL_LOCK_TTL + 5),
+            'success' => false,
+            'error' => '',
+        ]);
+
+        $status = StaticEditorInstaller::getStoredInstallStatus($settings);
+
+        $this->assertFalse($status['running']);
+        $this->assertTrue($status['stale']);
+    }
+
+    public function testResetInstallStatusReturnsIdle(): void
+    {
+        $settings = new class {
+            private array $store = [];
+            public function set(string $key, $value): void { $this->store[$key] = $value; }
+            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
+        };
+
+        StaticEditorInstaller::storeInstallStatus($settings, 'error', 'boom', [
+            'target_version' => '4.0.0',
+            'started_at' => 123,
+            'success' => true,
+            'error' => 'boom',
+        ]);
+        StaticEditorInstaller::resetInstallStatus($settings);
+
+        $status = StaticEditorInstaller::getStoredInstallStatus($settings);
+
+        $this->assertSame('idle', $status['phase']);
+        $this->assertSame('', $status['message']);
+        $this->assertSame('', $status['target_version']);
+        $this->assertFalse($status['success']);
+        $this->assertFalse($status['running']);
+    }
+
+    public function testIsFreshLockAndRunningPhaseHelpers(): void
+    {
+        $this->assertTrue(StaticEditorInstaller::isFreshLock(time()));
+        $this->assertFalse(StaticEditorInstaller::isFreshLock(time() - (StaticEditorInstaller::INSTALL_LOCK_TTL + 5)));
+        $this->assertTrue(StaticEditorInstaller::isRunningPhase('checking'));
+        $this->assertFalse(StaticEditorInstaller::isRunningPhase('done'));
+    }
+
     // =========================================================================
     // safeInstall tests
     // =========================================================================
@@ -264,6 +341,26 @@ XML;
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Unexpected release tag format');
         $this->installer->extractVersionFromFeed($feed);
+    }
+
+    public function testStatusCallbackReceivesReportedPhases(): void
+    {
+        $seen = [];
+        $installer = (new StaticEditorInstaller())->setStatusCallback(
+            function (string $phase, string $message, array $extra = []) use (&$seen): void {
+                $seen[] = [$phase, $message, $extra];
+            }
+        );
+
+        $ref = new \ReflectionClass($installer);
+        $method = $ref->getMethod('reportStatus');
+        $method->setAccessible(true);
+        $method->invoke($installer, 'checking', 'Checking latest version...', ['target_version' => '4.0.0']);
+
+        $this->assertCount(1, $seen);
+        $this->assertSame('checking', $seen[0][0]);
+        $this->assertSame('Checking latest version...', $seen[0][1]);
+        $this->assertSame('4.0.0', $seen[0][2]['target_version']);
     }
 
     // =========================================================================

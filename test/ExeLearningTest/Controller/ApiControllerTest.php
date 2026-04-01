@@ -1085,6 +1085,151 @@ class ApiControllerTest extends TestCase
         $this->assertFalse($result->getVariables()['success']);
     }
 
+    public function testInstallEditorStatusActionReturnsStatusPayload(): void
+    {
+        $settings = new class {
+            private array $store = [];
+            public function set(string $key, $value): void { $this->store[$key] = $value; }
+            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
+        };
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_PHASE, 'done');
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_MESSAGE, 'ok');
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_SUCCESS, true);
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_VERSION, '4.0.0-beta3');
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALLED_AT, '2026-04-01 12:00:00');
+
+        $this->controller->setEvent($this->buildEventWithSettings($settings, true));
+        $this->controller->setIdentity(new class {
+            public function getId(): int { return 1; }
+            public function getName(): string { return 'Admin'; }
+        });
+
+        $result = $this->controller->installEditorStatusAction();
+        $status = $result->getVariables()['status'];
+
+        $this->assertTrue($result->getVariables()['success']);
+        $this->assertSame('done', $status['phase']);
+        $this->assertSame('ok', $status['message']);
+        $this->assertTrue($status['success']);
+    }
+
+    public function testBuildInstallStatusPayloadConvertsStaleState(): void
+    {
+        $settings = new class {
+            private array $store = [];
+            public function set(string $key, $value): void { $this->store[$key] = $value; }
+            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
+        };
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_PHASE, 'installing');
+        $settings->set(
+            \ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_STARTED_AT,
+            time() - (\ExeLearning\Service\StaticEditorInstaller::INSTALL_LOCK_TTL + 5)
+        );
+
+        $payload = $this->callProtectedMethod($this->controller, 'buildInstallStatusPayload', [$settings]);
+
+        $this->assertSame('error', $payload['phase']);
+        $this->assertFalse($payload['running']);
+        $this->assertStringContainsString('stalled', strtolower($payload['message']));
+    }
+
+    public function testInstallEditorActionReturnsConflictWhenAlreadyRunning(): void
+    {
+        $settings = new class {
+            private array $store = [];
+            public function set(string $key, $value): void { $this->store[$key] = $value; }
+            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
+        };
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_PHASE, 'downloading');
+        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_STARTED_AT, time());
+
+        $request = new class {
+            public function isPost(): bool { return true; }
+            public function getPost($key = null, $default = null) { return $default; }
+            public function getQuery($key = null, $default = null) { return $default; }
+            public function getHeaders() {
+                return new class {
+                    public function get($name) { return null; }
+                };
+            }
+        };
+
+        $this->controller->setEvent($this->buildEventWithSettings($settings, true));
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity(new class {
+            public function getId(): int { return 1; }
+            public function getName(): string { return 'Admin'; }
+        });
+
+        $result = $this->controller->installEditorAction();
+
+        $this->assertInstanceOf(JsonModel::class, $result);
+        $this->assertEquals(409, $this->controller->getResponse()->getStatusCode());
+        $this->assertStringContainsString('already in progress', $result->getVariables()['message']);
+    }
+
+    private function buildEventWithSettings(object $settings, bool $userAllowed): object
+    {
+        return new class($settings, $userAllowed) {
+            private object $settings;
+            private bool $userAllowed;
+            public function __construct(object $settings, bool $userAllowed)
+            {
+                $this->settings = $settings;
+                $this->userAllowed = $userAllowed;
+            }
+            public function getApplication()
+            {
+                $settings = $this->settings;
+                $userAllowed = $this->userAllowed;
+                return new class($settings, $userAllowed) {
+                    private object $settings;
+                    private bool $userAllowed;
+                    public function __construct(object $settings, bool $userAllowed)
+                    {
+                        $this->settings = $settings;
+                        $this->userAllowed = $userAllowed;
+                    }
+                    public function getServiceManager()
+                    {
+                        $settings = $this->settings;
+                        $userAllowed = $this->userAllowed;
+                        return new class($settings, $userAllowed) {
+                            private object $settings;
+                            private bool $userAllowed;
+                            public function __construct(object $settings, bool $userAllowed)
+                            {
+                                $this->settings = $settings;
+                                $this->userAllowed = $userAllowed;
+                            }
+                            public function get(string $name)
+                            {
+                                if ($name === 'Omeka\Settings') {
+                                    return $this->settings;
+                                }
+                                if ($name === 'Omeka\Acl') {
+                                    $userAllowed = $this->userAllowed;
+                                    return new class($userAllowed) {
+                                        private bool $userAllowed;
+                                        public function __construct(bool $userAllowed)
+                                        {
+                                            $this->userAllowed = $userAllowed;
+                                        }
+                                        public function userIsAllowed(string $resource, string $privilege): bool
+                                        {
+                                            return $this->userAllowed;
+                                        }
+                                    };
+                                }
+                                return null;
+                            }
+                        };
+                    }
+                };
+            }
+        };
+    }
+
     public function testSetTeacherModeActionWithNoString(): void
     {
         $request = new class {
