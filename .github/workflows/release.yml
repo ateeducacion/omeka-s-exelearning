@@ -87,7 +87,7 @@ jobs:
           echo "url=https://ateeducacion.github.io/omeka-s-playground/?blueprint-data=${ENCODED}" >> $GITHUB_OUTPUT
 
       - name: Publish/Update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'push' && github.ref_name || env.RELEASE_TAG }}
           files: ExeLearning-${{ env.RELEASE_TAG }}.zip
