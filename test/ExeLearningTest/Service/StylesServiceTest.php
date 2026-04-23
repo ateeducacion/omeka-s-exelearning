@@ -394,6 +394,184 @@ class StylesServiceTest extends TestCase
         $this->assertTrue(true);
     }
 
+    public function testSetUploadedEnabledReturnsFalseForUnknownSlug(): void
+    {
+        $this->assertFalse($this->svc->setUploadedEnabled('missing', true));
+    }
+
+    public function testDeleteUploadedReturnsFalseForUnknownSlug(): void
+    {
+        $this->assertFalse($this->svc->deleteUploaded('missing'));
+    }
+
+    public function testGetStyleUrlPathIsSlugScopedAndEncoded(): void
+    {
+        $this->assertSame('/exelearning/styles/weird-name', $this->svc->getStyleUrlPath('weird name'));
+        $this->assertSame('/exelearning/styles/acme', $this->svc->getStyleUrlPath('ACME'));
+    }
+
+    public function testListUploadedStylesSkipsNonArrayEntries(): void
+    {
+        // Inject a malformed entry and confirm the listing filters it out.
+        $settings = new Settings();
+        $svc = new StylesService($settings, $this->tmpRoot . '/files', $this->tmpRoot . '/module');
+        $settings->set(StylesService::SETTING_REGISTRY, json_encode([
+            'uploaded' => [
+                'good' => ['title' => 'Good', 'enabled' => true, 'css_files' => ['style.css']],
+                'bad'  => 'this is not an array',
+            ],
+        ]));
+        $list = $svc->listUploadedStyles();
+        $this->assertCount(1, $list);
+        $this->assertSame('good', $list[0]['id']);
+    }
+
+    public function testBuildOverrideSkipsNonArrayOrDisabledEntries(): void
+    {
+        $settings = new Settings();
+        $svc = new StylesService($settings, $this->tmpRoot . '/files', $this->tmpRoot . '/module');
+        $settings->set(StylesService::SETTING_REGISTRY, json_encode([
+            'uploaded' => [
+                'off' => ['title' => 'Off', 'enabled' => false],
+                'bad' => 'scalar',
+                'on'  => ['title' => 'On', 'enabled' => true, 'css_files' => ['style.css']],
+            ],
+        ]));
+        $override = $svc->buildThemeRegistryOverride();
+        $this->assertCount(1, $override['uploaded']);
+        $this->assertSame('on', $override['uploaded'][0]['id']);
+    }
+
+    public function testGetRegistryGracefullyHandlesGarbageSettingValue(): void
+    {
+        $settings = new Settings();
+        $svc = new StylesService($settings, $this->tmpRoot . '/files', $this->tmpRoot . '/module');
+        // Not JSON at all.
+        $settings->set(StylesService::SETTING_REGISTRY, 'not json');
+        $r = $svc->getRegistry();
+        $this->assertSame([], $r['uploaded']);
+        $this->assertSame([], $r['disabled_builtins']);
+
+        // JSON but not an object.
+        $settings->set(StylesService::SETTING_REGISTRY, '[1,2,3]');
+        $r = $svc->getRegistry();
+        $this->assertSame([], $r['uploaded']);
+        $this->assertSame([], $r['disabled_builtins']);
+
+        // JSON object with wrong-typed fields.
+        $settings->set(StylesService::SETTING_REGISTRY, '{"uploaded":"nope","disabled_builtins":"nope"}');
+        $r = $svc->getRegistry();
+        $this->assertSame([], $r['uploaded']);
+        $this->assertSame([], $r['disabled_builtins']);
+    }
+
+    public function testValidateZipRejectsEmptyFile(): void
+    {
+        $empty = tempnam(sys_get_temp_dir(), 'empty') . '.zip';
+        file_put_contents($empty, '');
+        $this->expectException(\RuntimeException::class);
+        try {
+            $this->svc->validateZip($empty);
+        } finally {
+            @unlink($empty);
+        }
+    }
+
+    public function testValidateZipRejectsMissingFile(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->svc->validateZip($this->tmpRoot . '/does-not-exist.zip');
+    }
+
+    public function testValidateZipRejectsNonZipPayload(): void
+    {
+        $notzip = tempnam(sys_get_temp_dir(), 'notzip') . '.zip';
+        file_put_contents($notzip, 'this is not a zip archive');
+        $this->expectException(\RuntimeException::class);
+        try {
+            $this->svc->validateZip($notzip);
+        } finally {
+            @unlink($notzip);
+        }
+    }
+
+    public function testInstallSurvivesConfigXmlWithMinimumFields(): void
+    {
+        $zip = $this->makeZip([
+            'config.xml' => '<?xml version="1.0"?><theme><name>min</name></theme>',
+            'style.css'  => 'x{}',
+        ]);
+        $entry = $this->svc->installFromZip($zip);
+        $this->assertSame('min', $entry['name']);
+        // No title in config -> derived from name.
+        $this->assertSame('min', $entry['title']);
+        $this->assertSame('', $entry['version']);
+        @unlink($zip);
+    }
+
+    public function testHashZipPrefixesSha256(): void
+    {
+        $zip = $this->makeZip([
+            'config.xml' => $this->configXml('hashy'),
+            'style.css'  => 'x{}',
+        ]);
+        $entry = $this->svc->installFromZip($zip);
+        $this->assertStringStartsWith('sha256:', $entry['checksum']);
+        $this->assertSame(64, strlen(substr($entry['checksum'], 7)));
+        @unlink($zip);
+    }
+
+    public function testFindCssFilesPrioritizesStyleCss(): void
+    {
+        $zip = $this->makeZip([
+            'config.xml'  => $this->configXml('multi'),
+            'style.css'   => '/* primary */',
+            'extra.css'   => '/* extra */',
+            'zzz-last.css' => '/* sort-after-extra */',
+        ]);
+        $entry = $this->svc->installFromZip($zip);
+        $this->assertSame('style.css', $entry['css_files'][0]);
+        $this->assertCount(3, $entry['css_files']);
+        @unlink($zip);
+    }
+
+    public function testFindCssFilesStillWorksWithoutStyleCss(): void
+    {
+        $zip = $this->makeZip([
+            'config.xml' => $this->configXml('alt'),
+            'main.css'   => '/* main */',
+        ]);
+        $entry = $this->svc->installFromZip($zip);
+        $this->assertSame(['main.css'], $entry['css_files']);
+        @unlink($zip);
+    }
+
+    public function testValidateRejectsArchiveWhoseConfigIsNotAtPrefix(): void
+    {
+        $zip = $this->makeZip([
+            'acme/config.xml' => $this->configXml('acme'),
+            'outside.css'     => 'leak',
+        ]);
+        $this->expectException(\RuntimeException::class);
+        try {
+            $this->svc->validateZip($zip);
+        } finally {
+            @unlink($zip);
+        }
+    }
+
+    public function testRecursiveDeleteRemovesNestedFilesAndDirs(): void
+    {
+        $root = $this->tmpRoot . '/delete-target';
+        mkdir($root . '/inner/deep', 0755, true);
+        file_put_contents($root . '/a.txt', 'a');
+        file_put_contents($root . '/inner/b.txt', 'b');
+        file_put_contents($root . '/inner/deep/c.txt', 'c');
+        $this->assertDirectoryExists($root);
+        StylesService::recursiveDelete($root);
+        $this->assertDirectoryDoesNotExist($root);
+    }
+
     // ---------- helpers ----------
 
     private function makeZip(array $entries): string

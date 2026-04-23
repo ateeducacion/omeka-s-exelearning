@@ -105,6 +105,103 @@ class StylesControllerTest extends TestCase
     }
 
     // ------------------------------------------------------------------
+    // Action-level tests via a controller subclass that overrides the
+    // Laminas MVC plugin helpers. We keep them deliberately small — the
+    // real work happens in the service, which is exercised elsewhere.
+    // ------------------------------------------------------------------
+
+    public function testIndexActionDeniesWhenUserIsNotAllowed(): void
+    {
+        $ctrl = new TestableStylesController($this->svc, false);
+        $result = $ctrl->indexAction();
+        $this->assertSame(['redirect' => 'admin'], $ctrl->lastRedirect);
+    }
+
+    public function testIndexActionRendersViewWhenAllowed(): void
+    {
+        $ctrl = new TestableStylesController($this->svc, true);
+        $ctrl->stubRequestIsPost = false;
+        $result = $ctrl->indexAction();
+        $this->assertInstanceOf(\Laminas\View\Model\ViewModel::class, $result);
+        $vars = $result->getVariables();
+        $this->assertArrayHasKey('form', $vars);
+        $this->assertArrayHasKey('builtins', $vars);
+        $this->assertArrayHasKey('uploaded', $vars);
+        $this->assertSame('exelearning/admin/styles/index', $result->getTemplate());
+    }
+
+    public function testToggleUploadedActionRoutesThroughService(): void
+    {
+        $zip = $this->makeZip('acme', 'body{}');
+        $this->svc->installFromZip($zip, 'acme.zip');
+        $this->assertTrue($this->svc->getRegistry()['uploaded']['acme']['enabled']);
+
+        $ctrl = new TestableStylesController($this->svc, true);
+        $ctrl->stubRequestIsPost = true;
+        $ctrl->stubPost = ['slug' => 'acme', 'enabled' => 0];
+        $ctrl->toggleUploadedAction();
+
+        $this->assertFalse($this->svc->getRegistry()['uploaded']['acme']['enabled']);
+        $this->assertSame(['redirect' => 'admin/exelearning-styles'], $ctrl->lastRedirect);
+        @unlink($zip);
+    }
+
+    public function testToggleUploadedActionShortCircuitsOnGet(): void
+    {
+        $ctrl = new TestableStylesController($this->svc, true);
+        $ctrl->stubRequestIsPost = false;
+        $ctrl->toggleUploadedAction();
+        $this->assertSame(['redirect' => 'admin/exelearning-styles'], $ctrl->lastRedirect);
+    }
+
+    public function testToggleBuiltinActionPropagatesToService(): void
+    {
+        $ctrl = new TestableStylesController($this->svc, true);
+        $ctrl->stubRequestIsPost = true;
+        $ctrl->stubPost = ['id' => 'zen', 'enabled' => 0];
+        $ctrl->toggleBuiltinAction();
+        $this->assertSame(['zen'], $this->svc->getRegistry()['disabled_builtins']);
+    }
+
+    public function testDeleteActionRemovesUploadedAndFlashes(): void
+    {
+        $zip = $this->makeZip('goodbye', 'x{}');
+        $this->svc->installFromZip($zip, 'goodbye.zip');
+        $this->assertArrayHasKey('goodbye', $this->svc->getRegistry()['uploaded']);
+
+        $ctrl = new TestableStylesController($this->svc, true);
+        $ctrl->stubRequestIsPost = true;
+        $ctrl->stubPost = ['slug' => 'goodbye'];
+        $ctrl->deleteAction();
+
+        $this->assertArrayNotHasKey('goodbye', $this->svc->getRegistry()['uploaded']);
+        $this->assertContains('Style deleted.', $ctrl->messengerSuccess);
+        @unlink($zip);
+    }
+
+    public function testDeleteActionDeniedWhenNotAllowed(): void
+    {
+        $ctrl = new TestableStylesController($this->svc, false);
+        $ctrl->stubRequestIsPost = true;
+        $ctrl->stubPost = ['slug' => 'whatever'];
+        $ctrl->deleteAction();
+        $this->assertSame(['redirect' => 'admin/exelearning-styles'], $ctrl->lastRedirect);
+    }
+
+    public function testToggleBlockImportActionPropagates(): void
+    {
+        $ctrl = new TestableStylesController($this->svc, true);
+        $ctrl->stubRequestIsPost = true;
+        $ctrl->stubPost = ['enabled' => 1];
+        $ctrl->toggleBlockImportAction();
+        $this->assertTrue($this->svc->isImportBlocked());
+
+        $ctrl->stubPost = ['enabled' => 0];
+        $ctrl->toggleBlockImportAction();
+        $this->assertFalse($this->svc->isImportBlocked());
+    }
+
+    // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
 

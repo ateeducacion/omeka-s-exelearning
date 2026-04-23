@@ -127,8 +127,11 @@ class StylesController extends AbstractActionController
 
     /**
      * Capability gate: module administrators only.
+     *
+     * Protected so a test subclass can override it without having to
+     * wire up an entire Laminas service manager.
      */
-    private function allowed(): bool
+    protected function allowed(): bool
     {
         if (!$this->identity()) {
             return false;
