@@ -208,3 +208,129 @@ msgstr "No se pudo hacer copia de seguridad de la instalación actual del editor
 #: src/Service/StaticEditorInstaller.php
 msgid "Failed to copy editor files to the module directory."
 msgstr "Error al copiar los archivos del editor al directorio del módulo."
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "eXeLearning styles"
+msgstr "Estilos de eXeLearning"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Upload eXeLearning style packages and control which styles the embedded editor exposes. Disabled built-ins are hidden from the editor selector; uploaded styles can be enabled, disabled, or deleted at any time."
+msgstr "Sube paquetes de estilos de eXeLearning y controla qué estilos expone el editor integrado. Los estilos integrados deshabilitados quedan ocultos en el selector del editor; los estilos subidos se pueden habilitar, deshabilitar o eliminar en cualquier momento."
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Import policy"
+msgstr "Política de importación"
+
+#: view/exelearning/admin/styles/index.phtml
+#: src/Controller/Admin/StylesController.php
+msgid "Block user-imported styles"
+msgstr "Bloquear estilos importados por el usuario"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "When enabled, the embedded editor hides the \"User styles\" tab and silently refuses to install a style bundled inside an imported .elpx project. This mirrors the eXeLearning ONLINE_THEMES_INSTALL=false behavior."
+msgstr "Cuando está activado, el editor integrado oculta la pestaña «Estilos del usuario» y rechaza de forma silenciosa instalar un estilo incluido en un proyecto .elpx importado. Equivale al comportamiento de eXeLearning ONLINE_THEMES_INSTALL=false."
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Currently blocking — click to allow imports"
+msgstr "Actualmente bloqueando — pulsa para permitir importaciones"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Currently allowing — click to block imports"
+msgstr "Actualmente permitiendo — pulsa para bloquear importaciones"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Upload a new style"
+msgstr "Subir un estilo nuevo"
+
+#: src/Form/StylesUploadForm.php
+msgid "Style ZIP package(s)"
+msgstr "Paquete(s) ZIP de estilo"
+
+#: src/Form/StylesUploadForm.php
+msgid "Select one or more .zip files containing a valid config.xml."
+msgstr "Selecciona uno o más archivos .zip con un config.xml válido."
+
+#: src/Form/StylesUploadForm.php
+msgid "Upload styles"
+msgstr "Subir estilos"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Maximum file size: %s. Only .zip packages containing a valid config.xml are accepted."
+msgstr "Tamaño máximo: %s. Solo se aceptan paquetes .zip con un config.xml válido."
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Uploaded styles"
+msgstr "Estilos subidos"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "No uploaded styles yet."
+msgstr "Todavía no hay estilos subidos."
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Built-in styles"
+msgstr "Estilos integrados"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Built-in styles are not available because the embedded editor is not installed."
+msgstr "Los estilos integrados no están disponibles porque el editor integrado no está instalado."
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Title"
+msgstr "Título"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Id"
+msgstr "Id"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Version"
+msgstr "Versión"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Enabled"
+msgstr "Habilitado"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Actions"
+msgstr "Acciones"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Enable"
+msgstr "Habilitar"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Disable"
+msgstr "Deshabilitar"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Delete"
+msgstr "Eliminar"
+
+#: view/exelearning/admin/styles/index.phtml
+msgid "Delete this style? This cannot be undone."
+msgstr "¿Eliminar este estilo? Esta acción no se puede deshacer."
+
+#: src/Controller/Admin/StylesController.php
+msgid "Style \"%s\" installed."
+msgstr "Estilo «%s» instalado."
+
+#: src/Controller/Admin/StylesController.php
+msgid "Style deleted."
+msgstr "Estilo eliminado."
+
+#: Module.php
+msgid "Styles"
+msgstr "Estilos"
+
+#: Module.php
+msgid "Style management"
+msgstr "Gestión de estilos"
+
+#: Module.php
+msgid "Open styles page"
+msgstr "Abrir página de estilos"
+
+#: Module.php
+msgid "Upload eXeLearning style packages, enable/disable built-in styles, and control the \"Block user-imported styles\" policy from a dedicated page."
+msgstr "Sube paquetes de estilos de eXeLearning, habilita o deshabilita los estilos integrados y controla la política «Bloquear estilos importados por el usuario» desde una página dedicada."
+
