@@ -152,9 +152,30 @@ class StylesController extends AbstractActionController
         if (empty($files)) {
             return $summary;
         }
-        // Normalize to a list of single-file arrays.
+        // Normalize across the three shapes we can receive for styles_zip:
+        //   a) Raw PHP multi-file: ['name' => [...], 'tmp_name' => [...], ...]
+        //   b) Raw PHP single-file: ['name' => '...', 'tmp_name' => '...', ...]
+        //   c) Laminas-transposed list: [ ['name' => '...', 'tmp_name' => '...'], ... ]
+        // Only (c) arrives from $this->params()->fromFiles() with a multi
+        // input, so it MUST be handled or every multi-upload reports "no
+        // file was selected".
         $entries = [];
-        if (isset($files['tmp_name']) && is_array($files['tmp_name'])) {
+        $isTransposedList = array_is_list($files)
+            && isset($files[0])
+            && is_array($files[0])
+            && array_key_exists('tmp_name', $files[0]);
+        if ($isTransposedList) {
+            foreach ($files as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $entries[] = [
+                    'tmp_name' => $item['tmp_name'] ?? '',
+                    'name'     => $item['name'] ?? '',
+                    'error'    => $item['error'] ?? UPLOAD_ERR_NO_FILE,
+                ];
+            }
+        } elseif (isset($files['tmp_name']) && is_array($files['tmp_name'])) {
             $count = count($files['tmp_name']);
             for ($i = 0; $i < $count; $i++) {
                 $entries[] = [
@@ -172,7 +193,11 @@ class StylesController extends AbstractActionController
         }
         foreach ($entries as $entry) {
             if ((int) $entry['error'] !== UPLOAD_ERR_OK || $entry['tmp_name'] === '') {
-                $summary['errors'][] = sprintf('Upload failed: %s', $entry['name'] ?: 'unknown');
+                $summary['errors'][] = sprintf(
+                    'Upload failed for %s: %s',
+                    $entry['name'] !== '' ? $entry['name'] : 'unknown file',
+                    self::uploadErrorMessage((int) $entry['error'])
+                );
                 continue;
             }
             try {
@@ -183,5 +208,32 @@ class StylesController extends AbstractActionController
             }
         }
         return $summary;
+    }
+
+    /**
+     * Translate a PHP $_FILES error code into an admin-facing string.
+     */
+    private static function uploadErrorMessage(int $code): string
+    {
+        switch ($code) {
+            case UPLOAD_ERR_OK:
+                return 'OK';
+            case UPLOAD_ERR_INI_SIZE:
+                return 'file exceeds upload_max_filesize';
+            case UPLOAD_ERR_FORM_SIZE:
+                return 'file exceeds the form MAX_FILE_SIZE';
+            case UPLOAD_ERR_PARTIAL:
+                return 'the file was only partially uploaded';
+            case UPLOAD_ERR_NO_FILE:
+                return 'no file was selected';
+            case UPLOAD_ERR_NO_TMP_DIR:
+                return 'PHP is missing a temporary folder';
+            case UPLOAD_ERR_CANT_WRITE:
+                return 'PHP could not write the uploaded file to disk';
+            case UPLOAD_ERR_EXTENSION:
+                return 'a PHP extension stopped the upload';
+            default:
+                return sprintf('unknown upload error (code %d)', $code);
+        }
     }
 }
