@@ -212,11 +212,15 @@ class ApiController extends AbstractActionController
 
         $hash = $this->elpService->getMediaHash($media);
         $hasPreview = $this->elpService->hasPreview($media);
+        $hasScreenshot = $this->elpService->hasScreenshot($media);
 
-        // Return a relative content path; JS prepends the correct base from
+        // Return relative paths; JS prepends the correct base from
         // window.location (PHP cannot see the playground SW scope prefix).
         $contentPath = ($hash && $hasPreview)
             ? '/exelearning/content/' . $hash . '/index.html'
+            : null;
+        $screenshotPath = ($hash && $hasScreenshot)
+            ? '/exelearning/content/' . $hash . '/' . \ExeLearning\Service\ElpFileService::SCREENSHOT_FILENAME
             : null;
 
         return new JsonModel([
@@ -227,6 +231,8 @@ class ApiController extends AbstractActionController
             'filename' => $media->filename(),
             'hasPreview' => $hasPreview,
             'contentPath' => $contentPath,
+            'hasScreenshot' => $hasScreenshot,
+            'screenshotPath' => $screenshotPath,
             'teacherModeVisible' => $this->elpService->isTeacherModeVisible($media),
         ]);
     }

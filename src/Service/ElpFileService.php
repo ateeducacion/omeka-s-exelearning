@@ -17,6 +17,12 @@ use ZipArchive;
  */
 class ElpFileService
 {
+    /**
+     * Filename of the preview image bundled by eXeLearning at the root of
+     * every .elpx package. When present, used as the media thumbnail.
+     */
+    const SCREENSHOT_FILENAME = 'screenshot.png';
+
     /** @var ApiManager */
     protected $api;
 
@@ -32,25 +38,32 @@ class ElpFileService
     /** @var Logger|null */
     protected $logger;
 
+    /** @var object|null Optional Omeka\File\TempFileFactory */
+    protected $tempFileFactory;
+
     /**
      * @param ApiManager $api
      * @param EntityManager $entityManager
      * @param string $basePath Path to module's data/exelearning directory
      * @param string $filesPath Path to Omeka's files directory
      * @param Logger|null $logger
+     * @param object|null $tempFileFactory Omeka\File\TempFileFactory (optional;
+     *                                     required for thumbnail generation)
      */
     public function __construct(
         ApiManager $api,
         EntityManager $entityManager,
         string $basePath,
         string $filesPath,
-        ?Logger $logger = null
+        ?Logger $logger = null,
+        $tempFileFactory = null
     ) {
         $this->api = $api;
         $this->entityManager = $entityManager;
         $this->basePath = $basePath;
         $this->filesPath = $filesPath;
         $this->logger = $logger;
+        $this->tempFileFactory = $tempFileFactory;
     }
 
     /**
@@ -119,6 +132,11 @@ class ElpFileService
         $hasPreview = file_exists($extractPath . '/index.html');
         $this->log('info', sprintf('Has preview (index.html): %s', $hasPreview ? 'yes' : 'no'));
 
+        // Detect bundled screenshot.png (used as media thumbnail).
+        $screenshotPath = $extractPath . '/' . self::SCREENSHOT_FILENAME;
+        $hasScreenshot = file_exists($screenshotPath);
+        $this->log('info', sprintf('Has screenshot.png: %s', $hasScreenshot ? 'yes' : 'no'));
+
         // List extracted files for debugging
         if (is_dir($extractPath)) {
             $files = scandir($extractPath);
@@ -130,13 +148,21 @@ class ElpFileService
         $this->updateMediaData($media, [
             'exelearning_extracted_hash' => $hash,
             'exelearning_has_preview' => $hasPreview ? '1' : '0',
+            'exelearning_has_screenshot' => $hasScreenshot ? '1' : '0',
         ]);
+
+        // Generate Omeka thumbnail derivatives from screenshot.png.
+        // This is best-effort: failures must not break upload processing.
+        if ($hasScreenshot) {
+            $this->generateThumbnailsFromScreenshot($media, $screenshotPath);
+        }
 
         $this->log('info', 'Processing complete');
 
         return [
             'hash' => $hash,
             'hasPreview' => $hasPreview,
+            'hasScreenshot' => $hasScreenshot,
             'extractPath' => $extractPath,
         ];
     }
@@ -292,6 +318,55 @@ class ElpFileService
     }
 
     /**
+     * Whether the .elpx package bundled a screenshot.png at its root.
+     *
+     * @param MediaRepresentation $media
+     * @return bool
+     */
+    public function hasScreenshot(MediaRepresentation $media): bool
+    {
+        $data = $media->mediaData();
+        return ($data['exelearning_has_screenshot'] ?? '0') === '1';
+    }
+
+    /**
+     * Absolute filesystem path to the bundled screenshot.png, or null if
+     * the media has no screenshot or has not been extracted.
+     *
+     * @param MediaRepresentation $media
+     * @return string|null
+     */
+    public function getScreenshotPath(MediaRepresentation $media): ?string
+    {
+        $hash = $this->getMediaHash($media);
+        if (!$hash || !$this->hasScreenshot($media)) {
+            return null;
+        }
+
+        $path = $this->basePath . '/' . $hash . '/' . self::SCREENSHOT_FILENAME;
+        return file_exists($path) ? $path : null;
+    }
+
+    /**
+     * Public URL to the bundled screenshot.png, served through the secure
+     * content proxy (never directly from /files/exelearning/).
+     *
+     * @param MediaRepresentation $media
+     * @param string $baseUrl Site base URL (with optional path prefix).
+     * @return string|null
+     */
+    public function getScreenshotUrl(MediaRepresentation $media, string $baseUrl): ?string
+    {
+        $hash = $this->getMediaHash($media);
+        if (!$hash || !$this->hasScreenshot($media)) {
+            return null;
+        }
+
+        return rtrim($baseUrl, '/')
+            . '/exelearning/content/' . $hash . '/' . self::SCREENSHOT_FILENAME;
+    }
+
+    /**
      * Get the filesystem path to a media file.
      *
      * @param MediaRepresentation $media
@@ -348,6 +423,70 @@ class ElpFileService
 
         $zip->close();
         $this->log('info', sprintf('ZIP extracted successfully to %s', $extractPath));
+    }
+
+    /**
+     * Build Omeka thumbnail derivatives (large/medium/square) from a
+     * screenshot.png and persist hasThumbnails on the media entity.
+     *
+     * Best-effort: any failure is logged but does not propagate, so a
+     * faulty screenshot never blocks an .elpx upload.
+     *
+     * @param MediaRepresentation $media
+     * @param string $screenshotPath Absolute path to the extracted PNG.
+     *
+     * @codeCoverageIgnore
+     */
+    protected function generateThumbnailsFromScreenshot(
+        MediaRepresentation $media,
+        string $screenshotPath
+    ): void {
+        if (!$this->tempFileFactory) {
+            $this->log('info', 'No TempFileFactory available; skipping thumbnail generation');
+            return;
+        }
+
+        if (!is_file($screenshotPath)) {
+            $this->log('warn', sprintf('Screenshot not found at %s', $screenshotPath));
+            return;
+        }
+
+        $mediaEntity = $this->entityManager->find(Media::class, $media->id());
+        if (!$mediaEntity) {
+            $this->log('warn', sprintf('Media entity %d not found for thumbnails', $media->id()));
+            return;
+        }
+
+        // Copy screenshot to a temp file because TempFile may delete its source.
+        $tempPath = tempnam(sys_get_temp_dir(), 'elpx-thumb-');
+        if ($tempPath === false || !@copy($screenshotPath, $tempPath)) {
+            $this->log('err', 'Failed to copy screenshot.png to temp location');
+            return;
+        }
+
+        try {
+            $tempFile = $this->tempFileFactory->build();
+            $tempFile->setSourceName(self::SCREENSHOT_FILENAME);
+            $tempFile->setTempPath($tempPath);
+            $tempFile->setStorageId($mediaEntity->getStorageId());
+
+            $hasThumbnails = (bool) $tempFile->storeThumbnails();
+
+            $mediaEntity->setHasThumbnails($hasThumbnails);
+            $this->entityManager->persist($mediaEntity);
+            $this->entityManager->flush();
+
+            $this->log(
+                'info',
+                sprintf('Thumbnails %s for media %d', $hasThumbnails ? 'generated' : 'skipped', $media->id())
+            );
+        } catch (\Throwable $e) {
+            $this->log('err', sprintf('Thumbnail generation failed: %s', $e->getMessage()));
+        } finally {
+            if (file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+        }
     }
 
     /**
