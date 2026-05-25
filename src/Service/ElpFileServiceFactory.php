@@ -50,6 +50,22 @@ class ElpFileServiceFactory implements FactoryInterface
         // Extracted eXeLearning content goes in /files/exelearning/
         $basePath = $filesPath . '/exelearning';
 
-        return new ElpFileService($api, $entityManager, $basePath, $filesPath, $logger);
+        // TempFileFactory is required to generate thumbnail derivatives from
+        // the bundled screenshot.png; missing in lightweight test environments.
+        $tempFileFactory = null;
+        try {
+            $tempFileFactory = $services->get('Omeka\File\TempFileFactory');
+        } catch (\Throwable $e) {
+            // ignore - thumbnail generation will be silently skipped
+        }
+
+        return new ElpFileService(
+            $api,
+            $entityManager,
+            $basePath,
+            $filesPath,
+            $logger,
+            $tempFileFactory
+        );
     }
 }

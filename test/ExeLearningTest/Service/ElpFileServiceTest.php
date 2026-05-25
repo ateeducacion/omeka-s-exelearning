@@ -1144,6 +1144,291 @@ class ElpFileServiceTest extends TestCase
         $this->assertGreaterThan(3, count($infoMessages));
     }
 
+    // =========================================================================
+    // Screenshot detection / URL tests
+    // =========================================================================
+
+    public function testHasScreenshotReturnsFalseWhenNotSet(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            []
+        );
+
+        $this->assertFalse($this->service->hasScreenshot($media));
+    }
+
+    public function testHasScreenshotReturnsTrueWhenFlagged(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_has_screenshot' => '1']
+        );
+
+        $this->assertTrue($this->service->hasScreenshot($media));
+    }
+
+    public function testHasScreenshotReturnsFalseForZeroFlag(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_has_screenshot' => '0']
+        );
+
+        $this->assertFalse($this->service->hasScreenshot($media));
+    }
+
+    public function testGetScreenshotPathReturnsNullWithoutHash(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_has_screenshot' => '1']
+        );
+
+        $this->assertNull($this->service->getScreenshotPath($media));
+    }
+
+    public function testGetScreenshotPathReturnsNullWithoutScreenshotFlag(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_extracted_hash' => $hash]
+        );
+
+        $this->assertNull($this->service->getScreenshotPath($media));
+    }
+
+    public function testGetScreenshotPathReturnsNullWhenFileMissing(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            [
+                'exelearning_extracted_hash' => $hash,
+                'exelearning_has_screenshot' => '1',
+            ]
+        );
+
+        // No screenshot.png on disk under basePath/{hash}/
+        $this->assertNull($this->service->getScreenshotPath($media));
+    }
+
+    public function testGetScreenshotPathReturnsAbsolutePathWhenPresent(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $basePath = $this->testDir . '/exelearning';
+        mkdir($basePath . '/' . $hash, 0755, true);
+        $screenshotPath = $basePath . '/' . $hash . '/screenshot.png';
+        file_put_contents($screenshotPath, 'fake png');
+
+        $service = new ElpFileService(
+            new ApiManager(),
+            new EntityManager(),
+            $basePath,
+            $this->filesPath
+        );
+
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            [
+                'exelearning_extracted_hash' => $hash,
+                'exelearning_has_screenshot' => '1',
+            ]
+        );
+
+        $this->assertEquals($screenshotPath, $service->getScreenshotPath($media));
+    }
+
+    public function testGetScreenshotUrlReturnsProxiedUrl(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            [
+                'exelearning_extracted_hash' => $hash,
+                'exelearning_has_screenshot' => '1',
+            ]
+        );
+
+        $url = $this->service->getScreenshotUrl($media, 'http://example.com');
+        $this->assertEquals(
+            'http://example.com/exelearning/content/' . $hash . '/screenshot.png',
+            $url
+        );
+    }
+
+    public function testGetScreenshotUrlReturnsNullWithoutHash(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_has_screenshot' => '1']
+        );
+
+        $this->assertNull($this->service->getScreenshotUrl($media, 'http://example.com'));
+    }
+
+    public function testGetScreenshotUrlReturnsNullWithoutFlag(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_extracted_hash' => 'da39a3ee5e6b4b0d3255bfef95601890afd80709']
+        );
+
+        $this->assertNull($this->service->getScreenshotUrl($media, 'http://example.com'));
+    }
+
+    public function testGetScreenshotUrlNeverPointsToFilesDirectory(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            [
+                'exelearning_extracted_hash' => $hash,
+                'exelearning_has_screenshot' => '1',
+            ]
+        );
+
+        $url = $this->service->getScreenshotUrl($media, 'http://example.com');
+        $this->assertStringNotContainsString('/files/exelearning/', $url);
+        $this->assertStringContainsString('/exelearning/content/', $url);
+    }
+
+    public function testGetScreenshotUrlTrimsTrailingSlash(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            [
+                'exelearning_extracted_hash' => $hash,
+                'exelearning_has_screenshot' => '1',
+            ]
+        );
+
+        $url = $this->service->getScreenshotUrl($media, 'http://example.com/');
+        $this->assertEquals(
+            'http://example.com/exelearning/content/' . $hash . '/screenshot.png',
+            $url
+        );
+    }
+
+    public function testProcessUploadedFileDetectsScreenshot(): void
+    {
+        $zipPath = $this->filesPath . '/original/with-screenshot.elpx';
+        $this->createTestZip($zipPath, [
+            'index.html' => '<html></html>',
+            'contentv3.xml' => '<?xml version="1.0"?><c/>',
+            'screenshot.png' => 'fake png bytes',
+        ]);
+
+        $media = new MediaRepresentation(
+            'http://example.com/with-screenshot.elpx',
+            'With Screenshot',
+            'with-screenshot.elpx',
+            1
+        );
+
+        $result = $this->service->processUploadedFile($media);
+
+        $this->assertArrayHasKey('hasScreenshot', $result);
+        $this->assertTrue($result['hasScreenshot']);
+        $this->assertFileExists($result['extractPath'] . '/screenshot.png');
+    }
+
+    public function testProcessUploadedFileWithoutScreenshot(): void
+    {
+        $zipPath = $this->filesPath . '/original/no-screenshot.elpx';
+        $this->createTestZip($zipPath, [
+            'index.html' => '<html></html>',
+        ]);
+
+        $media = new MediaRepresentation(
+            'http://example.com/no-screenshot.elpx',
+            'No Screenshot',
+            'no-screenshot.elpx',
+            1
+        );
+
+        $result = $this->service->processUploadedFile($media);
+
+        $this->assertArrayHasKey('hasScreenshot', $result);
+        $this->assertFalse($result['hasScreenshot']);
+        $this->assertFileDoesNotExist($result['extractPath'] . '/screenshot.png');
+    }
+
+    public function testReplaceFileRefreshesScreenshotFlag(): void
+    {
+        $basePath = $this->testDir . '/exelearning-screenshot-replace';
+
+        $service = new ElpFileService(
+            new ApiManager(),
+            new EntityManager(),
+            $basePath,
+            $this->filesPath
+        );
+
+        // Original .elpx with screenshot
+        $originalPath = $this->filesPath . '/original/replace-screenshot.elpx';
+        $this->createTestZip($originalPath, [
+            'index.html' => '<html>old</html>',
+            'screenshot.png' => 'old png',
+        ]);
+
+        // Replacement .elpx WITHOUT screenshot
+        $newPath = $this->testDir . '/new-without-screenshot.elpx';
+        $this->createTestZip($newPath, [
+            'index.html' => '<html>new</html>',
+        ]);
+
+        $media = new MediaRepresentation(
+            'http://example.com/replace-screenshot.elpx',
+            'Replace Screenshot',
+            'replace-screenshot.elpx',
+            1
+        );
+
+        $result = $service->replaceFile($media, $newPath);
+
+        $this->assertFalse($result['hasScreenshot']);
+        $this->assertFileDoesNotExist($result['extractPath'] . '/screenshot.png');
+    }
+
     public function testReplaceFileWithoutOldHash(): void
     {
         $basePath = $this->testDir . '/exelearning-no-hash';

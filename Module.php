@@ -160,6 +160,48 @@ class Module extends AbstractModule
             'view.show.after',
             [$this, 'handlePublicItemShow']
         );
+
+        // Expose screenshot URL through the standard Omeka media JSON-LD API.
+        $sharedEventManager->attach(
+            'Omeka\Api\Representation\MediaRepresentation',
+            'rep.resource.json',
+            [$this, 'handleMediaJsonLd']
+        );
+    }
+
+    /**
+     * Add eXeLearning-specific fields (notably the bundled screenshot URL)
+     * to the JSON-LD output of media representations served by the API.
+     *
+     * @param Event $event
+     */
+    public function handleMediaJsonLd(Event $event)
+    {
+        $media = $event->getTarget();
+        if (!$media || !$this->isExeLearningFile($media)) {
+            return;
+        }
+
+        $services = $this->getServiceLocator();
+        $elpService = $services->get(Service\ElpFileService::class);
+
+        $hash = $elpService->getMediaHash($media);
+        if (!$hash) {
+            return;
+        }
+
+        $jsonLd = $event->getParam('jsonLd', []);
+
+        if ($elpService->hasScreenshot($media)) {
+            $jsonLd['o-module-exelearning:screenshot'] =
+                '/exelearning/content/' . $hash . '/' . Service\ElpFileService::SCREENSHOT_FILENAME;
+        }
+        if ($elpService->hasPreview($media)) {
+            $jsonLd['o-module-exelearning:content'] =
+                '/exelearning/content/' . $hash . '/index.html';
+        }
+
+        $event->setParam('jsonLd', $jsonLd);
     }
 
     /**
