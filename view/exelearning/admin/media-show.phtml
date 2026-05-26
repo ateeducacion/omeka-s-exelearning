@@ -96,7 +96,7 @@ if ($canEdit && $editorInstalled) {
             <?= $this->translate('Open in new tab') ?>
         </a>
         <?php if ($exeShowDownload): ?>
-            <?= DownloadFormats::renderSplitButton($this, $media, $exeFormatIds) ?>
+            <?= DownloadFormats::renderSplitButton($this, $media, $exeFormatIds, 'admin') ?>
         <?php endif; ?>
 
         <div style="margin-left:auto;"></div>

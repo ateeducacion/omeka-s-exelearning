@@ -134,8 +134,11 @@ final class DownloadFormats
      * @param \Laminas\View\Renderer\PhpRenderer            $view
      * @param \Omeka\Api\Representation\MediaRepresentation $media
      * @param string[]                                      $formatIds
+     * @param string                                        $variant
+     *        UI variant: 'default' (front-end blue split-button) or 'admin'
+     *        (matches the neutral grey Omeka admin button bar).
      */
-    public static function renderSplitButton($view, $media, array $formatIds): string
+    public static function renderSplitButton($view, $media, array $formatIds, string $variant = 'default'): string
     {
         $items = [];
         foreach ($formatIds as $id) {
@@ -162,7 +165,12 @@ final class DownloadFormats
             $view->escapeHtmlAttr($slug)
         );
 
-        $html = '<div class="exelearning-download" ' . $dataAttrs . '>';
+        $rootClasses = 'exelearning-download';
+        if ($variant === 'admin') {
+            $rootClasses .= ' exelearning-download--admin';
+        }
+
+        $html = '<div class="' . $rootClasses . '" ' . $dataAttrs . '>';
         $html .= self::renderItem($view, $primary, true);
 
         if (!empty($dropdown)) {

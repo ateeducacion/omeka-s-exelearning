@@ -324,3 +324,40 @@
     color: #6c757d;
     align-self: center;
 }
+
+/* Admin variant — match Omeka's grey button bar instead of the front-end
+   blue. Wraps the same markup so the JS keeps working untouched. */
+.exelearning-download--admin {
+    background: #fff;
+    border: 1px solid #c4c4c4;
+    border-radius: 3px;
+    color: #353535;
+    font-size: 13px;
+    overflow: hidden;
+}
+.exelearning-download--admin .exelearning-download__primary,
+.exelearning-download--admin .exelearning-download__toggle,
+.exelearning-download--admin .exelearning-download__item {
+    color: #353535;
+    padding: 4px 10px;
+    line-height: 1.4;
+    background: transparent;
+}
+.exelearning-download--admin .exelearning-download__primary:hover,
+.exelearning-download--admin .exelearning-download__toggle:hover {
+    background: #f1f1f1;
+    color: #353535;
+}
+.exelearning-download--admin .exelearning-download__toggle {
+    border-left-color: #c4c4c4;
+}
+.exelearning-download--admin .exelearning-download__menu {
+    border-color: #c4c4c4;
+}
+.exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
+    color: #353535;
+}
+.exelearning-download--admin .exelearning-download__menu .exelearning-download__item:hover {
+    background: #f1f1f1;
+    color: #353535;
+}

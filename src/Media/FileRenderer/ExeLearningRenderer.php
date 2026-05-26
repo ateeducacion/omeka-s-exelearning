@@ -99,7 +99,8 @@ class ExeLearningRenderer implements RendererInterface
         // Download button — multi-format split-button when enabled, otherwise
         // a plain link to the original .elpx.
         if ($showDownload) {
-            $html .= DownloadFormats::renderSplitButton($view, $media, $downloadFormatIds);
+            $variant = $this->isAdminRequest() ? 'admin' : 'default';
+            $html .= DownloadFormats::renderSplitButton($view, $media, $downloadFormatIds, $variant);
         }
 
         // Fullscreen button
@@ -280,6 +281,19 @@ class ExeLearningRenderer implements RendererInterface
         } catch (\Exception $e) {
             return $defaults;
         }
+    }
+
+    /**
+     * Whether the current request targets the Omeka admin UI.
+     */
+    protected function isAdminRequest(): bool
+    {
+        try {
+            $path = (string) $this->request->getUri()->getPath();
+        } catch (\Throwable $e) {
+            return false;
+        }
+        return strpos($path, '/admin/') !== false;
     }
 
     /**
