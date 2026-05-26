@@ -171,7 +171,7 @@ final class DownloadFormats
         }
 
         $html = '<div class="' . $rootClasses . '" ' . $dataAttrs . '>';
-        $html .= self::renderItem($view, $primary, true);
+        $html .= self::renderItem($view, $primary, true, $variant);
 
         if (!empty($dropdown)) {
             $html .= '<button type="button" class="exelearning-download__toggle" aria-haspopup="true" aria-expanded="false" aria-label="'
@@ -180,7 +180,7 @@ final class DownloadFormats
             $html .= '</button>';
             $html .= '<ul class="exelearning-download__menu" role="menu" hidden>';
             foreach ($dropdown as $fmt) {
-                $html .= '<li role="none">' . self::renderItem($view, $fmt, false) . '</li>';
+                $html .= '<li role="none">' . self::renderItem($view, $fmt, false, $variant) . '</li>';
             }
             $html .= '</ul>';
         }
@@ -216,33 +216,42 @@ final class DownloadFormats
      * @param \Laminas\View\Renderer\PhpRenderer $view
      * @param array<string, mixed>               $fmt
      */
-    private static function renderItem($view, array $fmt, bool $isPrimary): string
+    private static function renderItem($view, array $fmt, bool $isPrimary, string $variant = 'default'): string
     {
         $classes = $isPrimary ? 'exelearning-download__primary' : 'exelearning-download__item';
         $label = $view->translate((string) $fmt['label']);
 
+        // Match the original admin download button: a leading o-icon-download
+        // glyph (Omeka's own icon font) on the primary action.
+        $icon = '';
+        if ($variant === 'admin' && $isPrimary) {
+            $icon = '<span class="o-icon-download" aria-hidden="true"></span> ';
+        }
+
         if ($fmt['id'] === 'elpx') {
             return sprintf(
                 '<a href="#" class="%s" data-format="%s" data-suffix="%s" download role="%s">'
-                    . '<span class="exelearning-download__label">%s</span>'
+                    . '%s<span class="exelearning-download__label">%s</span>'
                 . '</a>',
                 $view->escapeHtmlAttr($classes),
                 $view->escapeHtmlAttr($fmt['id']),
                 $view->escapeHtmlAttr($fmt['suffix']),
                 $isPrimary ? 'button' : 'menuitem',
+                $icon,
                 $view->escapeHtml($label)
             );
         }
 
         return sprintf(
             '<button type="button" class="%s" data-format="%s" data-suffix="%s" data-mime="%s" role="%s">'
-                . '<span class="exelearning-download__label">%s</span>'
+                . '%s<span class="exelearning-download__label">%s</span>'
             . '</button>',
             $view->escapeHtmlAttr($classes),
             $view->escapeHtmlAttr($fmt['id']),
             $view->escapeHtmlAttr($fmt['suffix']),
             $view->escapeHtmlAttr($fmt['mime']),
             $isPrimary ? 'button' : 'menuitem',
+            $icon,
             $view->escapeHtml($label)
         );
     }
