@@ -19,14 +19,14 @@ final class DownloadFormats
         return [
             [
                 'id' => 'elpx',
-                'label' => 'eXeLearning source',
+                'label' => 'Download .elpx',
                 'suffix' => '.elpx',
                 'mime' => 'application/zip',
                 'client' => false,
             ],
             [
                 'id' => 'html5',
-                'label' => 'HTML5 web',
+                'label' => 'Web',
                 'suffix' => '_web.zip',
                 'mime' => 'application/zip',
                 'client' => true,
@@ -40,14 +40,14 @@ final class DownloadFormats
             ],
             [
                 'id' => 'ims',
-                'label' => 'IMS Content Package',
+                'label' => 'IMS Package',
                 'suffix' => '_ims.zip',
                 'mime' => 'application/zip',
                 'client' => true,
             ],
             [
                 'id' => 'epub3',
-                'label' => 'EPUB 3',
+                'label' => 'EPUB3',
                 'suffix' => '.epub',
                 'mime' => 'application/epub+zip',
                 'client' => true,
@@ -211,7 +211,7 @@ final class DownloadFormats
     private static function renderItem($view, array $fmt, bool $isPrimary): string
     {
         $classes = $isPrimary ? 'exelearning-download__primary' : 'exelearning-download__item';
-        $label = sprintf($view->translate('Download %s'), $view->translate((string) $fmt['label']));
+        $label = $view->translate((string) $fmt['label']);
 
         if ($fmt['id'] === 'elpx') {
             return sprintf(
