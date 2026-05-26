@@ -7,6 +7,7 @@ use Omeka\Api\Representation\MediaRepresentation;
 use Omeka\Media\FileRenderer\RendererInterface;
 use Laminas\View\Renderer\PhpRenderer;
 use ExeLearning\Service\ElpFileService;
+use ExeLearning\Service\DownloadFormats;
 
 /**
  * Renderer for eXeLearning files.
@@ -77,6 +78,14 @@ class ExeLearningRenderer implements RendererInterface
             $view->assetUrl('js/exelearning-viewer.js', 'ExeLearning')
         );
 
+        // Enqueue the download orchestrator only when the multi-format
+        // button will actually be rendered.
+        $downloadFormatIds = $this->getEnabledDownloadFormats($view);
+        $showDownload = !empty($downloadFormatIds);
+        if ($showDownload) {
+            DownloadFormats::enqueueDownloadAssets($view);
+        }
+
         $iframeId = 'exelearning-iframe-' . $media->id();
 
         // Build HTML
@@ -87,12 +96,12 @@ class ExeLearningRenderer implements RendererInterface
         $html .= '<span class="exelearning-title">' . $view->escapeHtml($media->displayTitle()) . '</span>';
         $html .= '<div class="exelearning-toolbar-actions">';
 
-        // Download button
-        $html .= '<a href="' . $view->escapeHtmlAttr($media->originalUrl()) . '" ';
-        $html .= 'class="button exelearning-download-btn" download>';
-        $html .= '<span class="icon-download"></span> ';
-        $html .= $view->translate('Download');
-        $html .= '</a>';
+        // Download button — multi-format split-button when enabled, otherwise
+        // a plain link to the original .elpx.
+        if ($showDownload) {
+            $variant = $this->isAdminRequest() ? 'admin' : 'default';
+            $html .= DownloadFormats::renderSplitButton($view, $media, $downloadFormatIds, $variant);
+        }
 
         // Fullscreen button
         $html .= '<button type="button" class="button exelearning-fullscreen-btn" ';
@@ -271,6 +280,45 @@ class ExeLearningRenderer implements RendererInterface
             ];
         } catch (\Exception $e) {
             return $defaults;
+        }
+    }
+
+    /**
+     * Whether the current request targets the Omeka admin UI.
+     */
+    protected function isAdminRequest(): bool
+    {
+        try {
+            $path = (string) $this->request->getUri()->getPath();
+        } catch (\Throwable $e) {
+            return false;
+        }
+        return strpos($path, '/admin/') !== false;
+    }
+
+    /**
+     * Read the configured set of download formats from module settings.
+     *
+     * @return string[] Sanitized list, possibly empty when the admin opted to
+     *                  hide the download button entirely.
+     */
+    protected function getEnabledDownloadFormats(PhpRenderer $view): array
+    {
+        try {
+            $setting = $view->getHelperPluginManager()->get('setting');
+            $stored = $setting('exelearning_download_formats', null);
+            if ($stored === null) {
+                return DownloadFormats::enabledByDefault();
+            }
+            if (is_string($stored)) {
+                $decoded = json_decode($stored, true);
+                if (is_array($decoded)) {
+                    $stored = $decoded;
+                }
+            }
+            return DownloadFormats::sanitize($stored);
+        } catch (\Exception $e) {
+            return DownloadFormats::enabledByDefault();
         }
     }
 }

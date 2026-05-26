@@ -6,6 +6,25 @@
  * @var \Omeka\Api\Representation\MediaRepresentation $media
  * @var string $contentPath  Relative path: /exelearning/content/{hash}/index.html
  */
+
+use ExeLearning\Service\DownloadFormats;
+
+$exeStoredFormats = null;
+try {
+    $exeStoredFormats = $this->setting('exelearning_download_formats', null);
+} catch (\Throwable $e) {
+    $exeStoredFormats = null;
+}
+$exeFormatIds = $exeStoredFormats === null
+    ? DownloadFormats::enabledByDefault()
+    : DownloadFormats::sanitize($exeStoredFormats);
+$exeShowDownload = !empty($exeFormatIds);
+if ($exeShowDownload) {
+    DownloadFormats::enqueueDownloadAssets($this);
+    $this->headLink()->appendStylesheet(
+        $this->assetUrl('css/exelearning.css', 'ExeLearning')
+    );
+}
 ?>
 
 <style>
@@ -60,9 +79,9 @@
             <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank">
                 <?= $this->translate('Open fullscreen') ?>
             </a>
-            <a href="<?= $this->escapeHtmlAttr($media->originalUrl()) ?>" download="<?= $this->escapeHtmlAttr($media->source()) ?>">
-                <?= $this->translate('Download') ?>
-            </a>
+            <?php if ($exeShowDownload): ?>
+                <?= DownloadFormats::renderSplitButton($this, $media, $exeFormatIds) ?>
+            <?php endif; ?>
         </div>
     </div>
     <iframe

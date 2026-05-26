@@ -334,3 +334,43 @@ msgstr "Abrir página de estilos"
 msgid "Upload eXeLearning style packages, enable/disable built-in styles, and control the \"Block user-imported styles\" policy from a dedicated page."
 msgstr "Sube paquetes de estilos de eXeLearning, habilita o deshabilita los estilos integrados y controla la política «Bloquear estilos importados por el usuario» desde una página dedicada."
 
+
+#: src/Service/DownloadFormats.php
+msgid "Web"
+msgstr "Web"
+
+#: src/Service/DownloadFormats.php
+msgid "SCORM 1.2"
+msgstr "SCORM 1.2"
+
+#: src/Service/DownloadFormats.php
+msgid "IMS Package"
+msgstr "Paquete IMS"
+
+#: src/Service/DownloadFormats.php
+msgid "EPUB3"
+msgstr "EPUB3"
+
+#: src/Service/DownloadFormats.php
+msgid "More download formats"
+msgstr "Más formatos de descarga"
+
+#: src/Media/FileRenderer/ExeLearningRenderer.php
+msgid "Preparing download…"
+msgstr "Preparando la descarga…"
+
+#: src/Media/FileRenderer/ExeLearningRenderer.php
+msgid "Download failed. Please try again."
+msgstr "La descarga ha fallado. Por favor, inténtelo de nuevo."
+
+#: src/Form/ConfigForm.php
+msgid "Download formats"
+msgstr "Formatos de descarga"
+
+#: src/Form/ConfigForm.php
+msgid "Formats offered by the download split-button on embedded eXeLearning content. Non-source formats are produced client-side by the editor exporters bundle."
+msgstr "Formatos que ofrece el botón de descarga del contenido eXeLearning embebido. Los formatos distintos del original se generan en el navegador con el paquete de exportadores del editor."
+
+#: src/Service/DownloadFormats.php
+msgid "Install the eXeLearning editor from Module → Settings to enable this format."
+msgstr "Instala el editor eXeLearning desde Módulo → Ajustes para habilitar este formato."

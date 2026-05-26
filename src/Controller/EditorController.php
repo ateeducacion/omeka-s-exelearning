@@ -162,6 +162,93 @@ class EditorController extends AbstractActionController
     }
 
     /**
+     * Public export-only bootstrap. Served anonymously so the multi-format
+     * download split-button (rendered on item show pages) can lazy-load the
+     * static editor inside a hidden iframe and run
+     * `SharedExporters.quickExport()` for a given media.
+     *
+     * The bootstrap exposes only the protocol needed for export — no save
+     * endpoint, no user data, no CSRF token. Authorization mirrors the
+     * media's public visibility (Omeka enforces that on originalUrl()).
+     *
+     * @return ViewModel|\Laminas\Http\Response
+     *
+     * @codeCoverageIgnore
+     */
+    public function exportAction()
+    {
+        $mediaId = (int) $this->params()->fromQuery('media_id', 0);
+        if (!$mediaId) {
+            $response = $this->getResponse();
+            $response->setStatusCode(400);
+            $response->setContent('Missing media_id');
+            return $response;
+        }
+
+        try {
+            $media = $this->api()->read('media', $mediaId)->getContent();
+        } catch (\Exception $e) {
+            $response = $this->getResponse();
+            $response->setStatusCode(404);
+            $response->setContent('Media not found');
+            return $response;
+        }
+
+        $filename = $media->filename();
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['elpx', 'zip'])) {
+            $response = $this->getResponse();
+            $response->setStatusCode(400);
+            $response->setContent('Not an eXeLearning file');
+            return $response;
+        }
+
+        $editorPath = dirname(__DIR__, 2) . '/dist/static/index.html';
+        if (!file_exists($editorPath)) {
+            $response = $this->getResponse();
+            $response->setStatusCode(503);
+            $response->setContent('Static eXeLearning editor not installed.');
+            return $response;
+        }
+
+        $uri = $this->getRequest()->getUri();
+        $port = $uri->getPort();
+        $serverUrl = $uri->getScheme() . '://' . $uri->getHost();
+        if ($port && !(($uri->getScheme() === 'http' && $port == 80) || ($uri->getScheme() === 'https' && $port == 443))) {
+            $serverUrl .= ':' . $port;
+        }
+        $basePath = $this->extractBasePath($uri->getPath());
+
+        $config = [
+            'mode' => 'OmekaSExport',
+            'mediaId' => $mediaId,
+            'elpUrl' => $media->originalUrl(),
+            'projectId' => 'omeka-export-' . $mediaId,
+            'editorBaseUrl' => $serverUrl . $basePath . '/modules/ExeLearning/dist/static',
+            'exportOnly' => true,
+            'i18n' => [
+                'loading' => $this->translate('Loading project...'),
+                'error' => $this->translate('Error'),
+            ],
+        ];
+
+        $view = new ViewModel([
+            'media' => $media,
+            'config' => $config,
+            'editorBaseUrl' => $config['editorBaseUrl'],
+            'themeRegistryOverride' => [
+                'disabledBuiltins' => [],
+                'uploaded' => [],
+                'blockImportInstall' => false,
+                'fallbackTheme' => 'base',
+            ],
+        ]);
+        $view->setTemplate('exelearning/editor-bootstrap');
+        $view->setTerminal(true);
+        return $view;
+    }
+
+    /**
      * Index action - redirect to admin.
      *
      * @return \Laminas\Http\Response

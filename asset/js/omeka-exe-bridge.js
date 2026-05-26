@@ -203,6 +203,67 @@
     }
 
     /**
+     * Export the loaded project to a specific format using SharedExporters.
+     * Posts the resulting bytes back to the parent window for download.
+     */
+    async function handleExportRequest(message) {
+        var requestId = message.requestId;
+        var format = String(message.data?.format || message.format || '');
+        try {
+            if (!format) {
+                throw new Error('Missing format');
+            }
+            var app = window.eXeLearning?.app;
+            var yjsBridge = app?.project?._yjsBridge || window.YjsModules?.getBridge?.();
+            if (!yjsBridge?.documentManager) {
+                throw new Error('Document not ready');
+            }
+            if (!window.SharedExporters?.quickExport) {
+                throw new Error('SharedExporters bundle not loaded');
+            }
+
+            var result = await window.SharedExporters.quickExport(
+                format,
+                yjsBridge.documentManager,
+                yjsBridge.assetCache || null,
+                yjsBridge.resourceFetcher || null,
+                {},
+                yjsBridge.assetManager || null
+            );
+            if (!result?.success || !result?.data) {
+                throw new Error(result?.error || 'Export failed');
+            }
+
+            var mime = (format === 'epub3' || format === 'epub')
+                ? 'application/epub+zip'
+                : 'application/zip';
+            var blob = new Blob([result.data], { type: mime });
+            var bytes = await blob.arrayBuffer();
+
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'OMEKA_EXPORT_FILE',
+                    requestId: requestId,
+                    format: format,
+                    bytes: bytes,
+                    filename: result.filename || ('project.' + format),
+                    mimeType: mime,
+                    size: bytes.byteLength,
+                }, '*');
+            }
+        } catch (error) {
+            console.error('[Omeka-EXE Bridge] Export failed:', error);
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'OMEKA_REQUEST_EXPORT_ERROR',
+                    requestId: requestId,
+                    error: error.message || 'Export failed',
+                }, '*');
+            }
+        }
+    }
+
+    /**
      * Save project to Omeka-S
      */
     async function saveToOmeka() {
@@ -365,6 +426,9 @@
             window.addEventListener('message', function(event) {
                 if (event.data?.type === 'exelearning-request-save') {
                     saveToOmeka();
+                }
+                if (event.data?.type === 'OMEKA_REQUEST_EXPORT') {
+                    handleExportRequest(event.data);
                 }
                 // Re-check ydoc after parent messages (may trigger after import)
                 setTimeout(function() {

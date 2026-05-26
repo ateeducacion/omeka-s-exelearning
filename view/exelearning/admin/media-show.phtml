@@ -7,9 +7,28 @@
  * @var string $contentPath  Relative path: /exelearning/content/{hash}/index.html
  */
 
+use ExeLearning\Service\DownloadFormats;
+
 // Check if user can edit this media and if the editor is installed
 $canEdit = $this->identity() && $this->userIsAllowed('Omeka\Entity\Media', 'update');
 $editorInstalled = \ExeLearning\Service\StaticEditorInstaller::isEditorInstalled();
+
+$exeStoredFormats = null;
+try {
+    $exeStoredFormats = $this->setting('exelearning_download_formats', null);
+} catch (\Throwable $e) {
+    $exeStoredFormats = null;
+}
+$exeFormatIds = $exeStoredFormats === null
+    ? DownloadFormats::enabledByDefault()
+    : DownloadFormats::sanitize($exeStoredFormats);
+$exeShowDownload = !empty($exeFormatIds);
+if ($exeShowDownload) {
+    DownloadFormats::enqueueDownloadAssets($this);
+    $this->headLink()->appendStylesheet(
+        $this->assetUrl('css/exelearning.css', 'ExeLearning')
+    );
+}
 
 $editUrl = $this->url('admin/exelearning-editor', ['action' => 'edit', 'id' => $media->id()]);
 $mediaId = $media->id();
@@ -76,10 +95,9 @@ if ($canEdit && $editorInstalled) {
             <span class="o-icon-external" aria-hidden="true"></span>
             <?= $this->translate('Open in new tab') ?>
         </a>
-        <a href="<?= $this->escapeHtmlAttr($media->originalUrl()) ?>" download="<?= $this->escapeHtmlAttr($media->source()) ?>" class="button">
-            <span class="o-icon-download" aria-hidden="true"></span>
-            <?= $this->translate('Download .elpx') ?>
-        </a>
+        <?php if ($exeShowDownload): ?>
+            <?= DownloadFormats::renderSplitButton($this, $media, $exeFormatIds, 'admin') ?>
+        <?php endif; ?>
 
         <div style="margin-left:auto;"></div>
         <?php if ($canEdit && $editorInstalled): ?>

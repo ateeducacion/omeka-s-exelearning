@@ -245,3 +245,169 @@
 .omeka-exe-notification--fade {
     opacity: 0;
 }
+
+/* ----------------------------------------------------------------------
+   Multi-format split download button — front-end (blue) variant
+   --------------------------------------------------------------------
+   Every rule below is scoped to `:not(.exelearning-download--admin)` so
+   the front styling never leaks into the admin variant, where Omeka's
+   own `.button` class must drive the look.
+   ---------------------------------------------------------------- */
+.exelearning-download {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    overflow: visible;
+}
+
+.exelearning-download[data-busy="1"] {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.exelearning-download:not(.exelearning-download--admin) {
+    background: #087cb8;
+    border-radius: 4px;
+    color: #fff;
+}
+
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__primary,
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__toggle,
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: transparent;
+    color: #fff;
+    text-decoration: none;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1.2;
+}
+
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__primary:hover,
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__toggle:hover {
+    background: rgba(0, 0, 0, 0.15);
+    color: #fff;
+}
+
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__toggle {
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 6px 8px;
+}
+
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin: 4px 0 0;
+    padding: 4px 0;
+    list-style: none;
+    background: #fff;
+    color: #212529;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 220px;
+    z-index: 1000;
+}
+
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__menu .exelearning-download__item {
+    width: 100%;
+    color: #212529;
+    padding: 8px 14px;
+    background: transparent;
+    text-align: left;
+}
+
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__menu .exelearning-download__item:hover {
+    background: #f1f3f5;
+    color: #212529;
+}
+
+.exelearning-download__status {
+    font-size: 12px;
+    margin-left: 10px;
+    color: #6c757d;
+    align-self: center;
+}
+
+/* ----------------------------------------------------------------------
+   Admin variant — lean on Omeka's own .button class. The only thing we
+   set here is the layout glue (gap between buttons, dropdown position
+   and z-index above the iframe). The .button class added in PHP brings
+   all the background/border/color/padding.
+   ---------------------------------------------------------------- */
+.exelearning-download--admin {
+    /* Layout only — no colours, no padding, no borders. */
+    gap: 4px;
+    align-items: center;
+    /* Keep the toolbar (and its absolute dropdown) above the preview
+       iframe stacking context. */
+    z-index: 100;
+}
+
+.exelearning-download--admin .exelearning-download__menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin: 4px 0 0;
+    list-style: none;
+    padding: 4px;
+    min-width: 180px;
+    background: #fff;
+    border: 1px solid #c4c4c4;
+    border-radius: 3px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1001;
+}
+
+.exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
+    display: block;
+    width: 100%;
+    margin: 2px 0;
+    text-align: left;
+}
+
+.exelearning-download__item--disabled,
+.exelearning-download__primary.exelearning-download__item--disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Busy spinner — replaces the previous "Preparing download…" inline text.
+   When the orchestrator JS is generating an export it sets data-busy="1" on
+   the container; we overlay a small spinner over the primary action and
+   dim it. Cleared automatically as soon as JS removes the attribute. */
+.exelearning-download[data-busy="1"] .exelearning-download__primary {
+    color: transparent !important;
+    position: relative;
+}
+.exelearning-download[data-busy="1"] .exelearning-download__primary > * {
+    visibility: hidden;
+}
+.exelearning-download[data-busy="1"] .exelearning-download__primary::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    opacity: 0.85;
+    animation: exelearning-spin 0.7s linear infinite;
+    visibility: visible;
+}
+.exelearning-download--admin[data-busy="1"] .exelearning-download__primary::after {
+    border-color: #353535;
+    border-top-color: transparent;
+}
+@keyframes exelearning-spin {
+    to { transform: rotate(360deg); }
+}

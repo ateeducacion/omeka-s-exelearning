@@ -80,6 +80,19 @@ return [
                     ],
                 ],
             ],
+            // Public anonymous export bootstrap. Hidden iframe loaded by the
+            // download split-button JS — no admin auth, export-only.
+            'exelearning-export' => [
+                'type' => Literal::class,
+                'options' => [
+                    'route' => '/exelearning/export',
+                    'defaults' => [
+                        '__NAMESPACE__' => 'ExeLearning\Controller',
+                        'controller' => 'Editor',
+                        'action' => 'export',
+                    ],
+                ],
+            ],
             'exelearning-styles-serve' => [
                 'type' => Regex::class,
                 'options' => [
