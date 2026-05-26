@@ -377,3 +377,37 @@
     cursor: not-allowed;
     pointer-events: none;
 }
+
+/* Busy spinner — replaces the previous "Preparing download…" inline text.
+   When the orchestrator JS is generating an export it sets data-busy="1" on
+   the container; we overlay a small spinner over the primary action and
+   dim it. Cleared automatically as soon as JS removes the attribute. */
+.exelearning-download[data-busy="1"] .exelearning-download__primary {
+    color: transparent !important;
+    position: relative;
+}
+.exelearning-download[data-busy="1"] .exelearning-download__primary > * {
+    visibility: hidden;
+}
+.exelearning-download[data-busy="1"] .exelearning-download__primary::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    opacity: 0.85;
+    animation: exelearning-spin 0.7s linear infinite;
+    visibility: visible;
+}
+.exelearning-download--admin[data-busy="1"] .exelearning-download__primary::after {
+    border-color: #353535;
+    border-top-color: transparent;
+}
+@keyframes exelearning-spin {
+    to { transform: rotate(360deg); }
+}

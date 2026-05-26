@@ -220,7 +220,6 @@
         }
 
         setBusy(container, true);
-        showStatus(container, (window.OMEKA_EXE_DOWNLOAD_I18N && window.OMEKA_EXE_DOWNLOAD_I18N.preparing) || 'Preparing download…');
 
         ensureIframe(mediaId)
             .then(function() { return requestExport(format); })
