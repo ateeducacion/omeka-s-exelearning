@@ -156,21 +156,45 @@ final class DownloadFormats
      */
     public static function renderSplitButton($view, $media, array $formatIds, string $variant = 'default'): string
     {
+        $editorInstalled = \ExeLearning\Service\StaticEditorInstaller::isEditorInstalled();
+
         $items = [];
         foreach ($formatIds as $id) {
             $fmt = self::get($id);
-            if ($fmt) {
-                $items[] = $fmt;
+            if (!$fmt) {
+                continue;
             }
+            // When the static editor is not installed only the raw `.elpx`
+            // download works (it's just the original attachment). Mark the
+            // others as disabled so the UI is honest about what is reachable.
+            $fmt['disabled'] = $fmt['client'] && !$editorInstalled;
+            $items[] = $fmt;
         }
         if (empty($items)) {
             return '';
         }
 
+        // If the editor is missing and the .elpx item is enabled, promote it
+        // as the primary action so the visible button stays functional.
+        if (!$editorInstalled) {
+            usort($items, static function (array $a, array $b): int {
+                return ($a['disabled'] ? 1 : 0) <=> ($b['disabled'] ? 1 : 0);
+            });
+        }
+
         $primary = array_shift($items);
         $dropdown = $items;
 
-        $sourceName = method_exists($media, 'filename') ? (string) $media->filename() : '';
+        // Prefer the original uploaded filename (`source()`) over the storage
+        // filename (`filename()`, which is the SHA1 hash) so downloads land
+        // with a human-readable name like `really-simple-test-project_web.zip`
+        // instead of `<hash>_web.zip`.
+        $sourceName = '';
+        if (method_exists($media, 'source') && $media->source()) {
+            $sourceName = (string) $media->source();
+        } elseif (method_exists($media, 'filename')) {
+            $sourceName = (string) $media->filename();
+        }
         $slug = pathinfo($sourceName ?: ('media-' . $media->id()), PATHINFO_FILENAME);
         $slug = preg_replace('/[^A-Za-z0-9._-]+/', '-', $slug) ?: ('media-' . $media->id());
 
@@ -239,36 +263,41 @@ final class DownloadFormats
     private static function renderItem($view, array $fmt, bool $isPrimary, string $variant = 'default'): string
     {
         $classes = $isPrimary ? 'exelearning-download__primary' : 'exelearning-download__item';
-        // Reuse Omeka's native `.button` class in admin so the items pick up
-        // the real admin button styling instead of a custom approximation.
         if ($variant === 'admin') {
             $classes .= ' button';
         }
+        $disabled = !empty($fmt['disabled']);
+        if ($disabled) {
+            $classes .= ' exelearning-download__item--disabled';
+        }
         $label = $view->translate((string) $fmt['label']);
 
-        // Match the original admin download button: a leading o-icon-download
-        // glyph (Omeka's own icon font) on the primary action.
         $icon = '';
         if ($variant === 'admin' && $isPrimary) {
             $icon = '<span class="o-icon-download" aria-hidden="true"></span> ';
         }
 
+        $title = $disabled
+            ? $view->escapeHtmlAttr($view->translate('Install the eXeLearning editor from Module → Settings to enable this format.'))
+            : '';
+
         if ($fmt['id'] === 'elpx') {
             return sprintf(
-                '<a href="#" class="%s" data-format="%s" data-suffix="%s" download role="%s">'
+                '<a href="#" class="%s" data-format="%s" data-suffix="%s" download role="%s"%s>'
                     . '%s<span class="exelearning-download__label">%s</span>'
                 . '</a>',
                 $view->escapeHtmlAttr($classes),
                 $view->escapeHtmlAttr($fmt['id']),
                 $view->escapeHtmlAttr($fmt['suffix']),
                 $isPrimary ? 'button' : 'menuitem',
+                $title ? ' title="' . $title . '"' : '',
                 $icon,
                 $view->escapeHtml($label)
             );
         }
 
         return sprintf(
-            '<button type="button" class="%s" data-format="%s" data-suffix="%s" data-mime="%s" role="%s">'
+            '<button type="button" class="%s" data-format="%s" data-suffix="%s" data-mime="%s" role="%s"%s%s>'
                 . '%s<span class="exelearning-download__label">%s</span>'
             . '</button>',
             $view->escapeHtmlAttr($classes),
@@ -276,6 +305,8 @@ final class DownloadFormats
             $view->escapeHtmlAttr($fmt['suffix']),
             $view->escapeHtmlAttr($fmt['mime']),
             $isPrimary ? 'button' : 'menuitem',
+            $disabled ? ' disabled aria-disabled="true"' : '',
+            $title ? ' title="' . $title . '"' : '',
             $icon,
             $view->escapeHtml($label)
         );

@@ -370,3 +370,10 @@
     margin: 2px 0;
     text-align: left;
 }
+
+.exelearning-download__item--disabled,
+.exelearning-download__primary.exelearning-download__item--disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+}

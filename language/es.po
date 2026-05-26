@@ -370,3 +370,7 @@ msgstr "Formatos de descarga"
 #: src/Form/ConfigForm.php
 msgid "Formats offered by the download split-button on embedded eXeLearning content. Non-source formats are produced client-side by the editor exporters bundle."
 msgstr "Formatos que ofrece el botón de descarga del contenido eXeLearning embebido. Los formatos distintos del original se generan en el navegador con el paquete de exportadores del editor."
+
+#: src/Service/DownloadFormats.php
+msgid "Install the eXeLearning editor from Module → Settings to enable this format."
+msgstr "Instala el editor eXeLearning desde Módulo → Ajustes para habilitar este formato."

@@ -146,3 +146,7 @@ msgstr ""
 #: src/Form/ConfigForm.php
 msgid "Formats offered by the download split-button on embedded eXeLearning content. Non-source formats are produced client-side by the editor exporters bundle."
 msgstr ""
+
+#: src/Service/DownloadFormats.php
+msgid "Install the eXeLearning editor from Module → Settings to enable this format."
+msgstr ""
