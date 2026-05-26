@@ -5,6 +5,7 @@ namespace ExeLearning\Form;
 
 use Laminas\Form\Element;
 use Laminas\Form\Form;
+use ExeLearning\Service\DownloadFormats;
 
 /**
  * Configuration form for the ExeLearning module.
@@ -43,6 +44,24 @@ class ConfigForm extends Form
             ],
             'attributes' => [
                 'value' => '1',
+            ],
+        ]);
+
+        $valueOptions = [];
+        foreach (DownloadFormats::all() as $fmt) {
+            $valueOptions[$fmt['id']] = sprintf('%s (%s)', $fmt['label'], $fmt['suffix']);
+        }
+
+        $this->add([
+            'name' => 'exelearning_download_formats',
+            'type' => Element\MultiCheckbox::class,
+            'options' => [
+                'label' => 'Download formats', // @translate
+                'info' => 'Formats offered by the download split-button on embedded eXeLearning content. Non-source formats are produced client-side by the editor exporters bundle.', // @translate
+                'value_options' => $valueOptions,
+            ],
+            'attributes' => [
+                'value' => DownloadFormats::defaultIds(),
             ],
         ]);
     }

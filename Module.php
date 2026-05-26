@@ -12,6 +12,7 @@ use Omeka\Module\AbstractModule;
 use Omeka\Mvc\Controller\Plugin\Messenger;
 use Omeka\Stdlib\Message;
 use ExeLearning\Form\ConfigForm;
+use ExeLearning\Service\DownloadFormats;
 use ExeLearning\Service\StaticEditorInstaller;
 
 /**
@@ -741,9 +742,19 @@ JS
         $form = new ConfigForm;
         $form->init();
 
+        $storedFormats = $settings->get('exelearning_download_formats', null);
+        if (is_string($storedFormats)) {
+            $decoded = json_decode($storedFormats, true);
+            $storedFormats = is_array($decoded) ? $decoded : null;
+        }
+        if (!is_array($storedFormats)) {
+            $storedFormats = DownloadFormats::defaultIds();
+        }
+
         $form->setData([
             'exelearning_viewer_height' => $settings->get('exelearning_viewer_height', 600),
             'exelearning_show_edit_button' => $settings->get('exelearning_show_edit_button', true) ? '1' : '0',
+            'exelearning_download_formats' => DownloadFormats::sanitize($storedFormats),
         ]);
 
         $formHtml = $renderer->formCollection($form, false);
@@ -933,6 +944,10 @@ JS
         $settings->set(
             'exelearning_show_edit_button',
             isset($config['exelearning_show_edit_button']) && $config['exelearning_show_edit_button'] === '1'
+        );
+        $settings->set(
+            'exelearning_download_formats',
+            DownloadFormats::sanitize($config['exelearning_download_formats'] ?? [])
         );
     }
 }

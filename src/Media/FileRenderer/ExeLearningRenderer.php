@@ -7,6 +7,7 @@ use Omeka\Api\Representation\MediaRepresentation;
 use Omeka\Media\FileRenderer\RendererInterface;
 use Laminas\View\Renderer\PhpRenderer;
 use ExeLearning\Service\ElpFileService;
+use ExeLearning\Service\DownloadFormats;
 
 /**
  * Renderer for eXeLearning files.
@@ -77,6 +78,21 @@ class ExeLearningRenderer implements RendererInterface
             $view->assetUrl('js/exelearning-viewer.js', 'ExeLearning')
         );
 
+        // Enqueue the download orchestrator only when the multi-format
+        // button will actually be rendered.
+        $downloadFormatIds = $this->getEnabledDownloadFormats($view);
+        $showDownload = !empty($downloadFormatIds);
+        if ($showDownload) {
+            $view->headScript()->appendFile(
+                $view->assetUrl('js/omeka-exe-download.js', 'ExeLearning')
+            );
+            $i18n = json_encode([
+                'preparing' => $view->translate('Preparing download…'),
+                'failed' => $view->translate('Download failed. Please try again.'),
+            ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+            $view->headScript()->appendScript('window.OMEKA_EXE_DOWNLOAD_I18N = ' . $i18n . ';');
+        }
+
         $iframeId = 'exelearning-iframe-' . $media->id();
 
         // Build HTML
@@ -87,12 +103,11 @@ class ExeLearningRenderer implements RendererInterface
         $html .= '<span class="exelearning-title">' . $view->escapeHtml($media->displayTitle()) . '</span>';
         $html .= '<div class="exelearning-toolbar-actions">';
 
-        // Download button
-        $html .= '<a href="' . $view->escapeHtmlAttr($media->originalUrl()) . '" ';
-        $html .= 'class="button exelearning-download-btn" download>';
-        $html .= '<span class="icon-download"></span> ';
-        $html .= $view->translate('Download');
-        $html .= '</a>';
+        // Download button — multi-format split-button when enabled, otherwise
+        // a plain link to the original .elpx.
+        if ($showDownload) {
+            $html .= $this->renderDownloadSplitButton($view, $media, $downloadFormatIds);
+        }
 
         // Fullscreen button
         $html .= '<button type="button" class="button exelearning-fullscreen-btn" ';
@@ -272,5 +287,115 @@ class ExeLearningRenderer implements RendererInterface
         } catch (\Exception $e) {
             return $defaults;
         }
+    }
+
+    /**
+     * Read the configured set of download formats from module settings.
+     *
+     * @return string[] Sanitized list, possibly empty when the admin opted to
+     *                  hide the download button entirely.
+     */
+    protected function getEnabledDownloadFormats(PhpRenderer $view): array
+    {
+        try {
+            $setting = $view->getHelperPluginManager()->get('setting');
+            $stored = $setting('exelearning_download_formats', null);
+            if ($stored === null) {
+                return DownloadFormats::defaultIds();
+            }
+            if (is_string($stored)) {
+                $decoded = json_decode($stored, true);
+                if (is_array($decoded)) {
+                    $stored = $decoded;
+                }
+            }
+            return DownloadFormats::sanitize($stored);
+        } catch (\Exception $e) {
+            return DownloadFormats::defaultIds();
+        }
+    }
+
+    /**
+     * Render the multi-format download split-button.
+     *
+     * @param string[] $formatIds
+     */
+    protected function renderDownloadSplitButton(PhpRenderer $view, MediaRepresentation $media, array $formatIds): string
+    {
+        $items = [];
+        foreach ($formatIds as $id) {
+            $fmt = DownloadFormats::get($id);
+            if ($fmt) {
+                $items[] = $fmt;
+            }
+        }
+        if (empty($items)) {
+            return '';
+        }
+
+        $primary = array_shift($items);
+        $dropdown = $items;
+
+        $slug = pathinfo($media->filename() ?: ('media-' . $media->id()), PATHINFO_FILENAME);
+        $slug = preg_replace('/[^A-Za-z0-9._-]+/', '-', $slug) ?: ('media-' . $media->id());
+
+        $dataAttrs = sprintf(
+            'data-media-id="%d" data-elp-url="%s" data-slug="%s"',
+            $media->id(),
+            $view->escapeHtmlAttr($media->originalUrl()),
+            $view->escapeHtmlAttr($slug)
+        );
+
+        $html = '<div class="exelearning-download" ' . $dataAttrs . '>';
+        $html .= $this->renderDownloadItem($view, $primary, true);
+
+        if (!empty($dropdown)) {
+            $html .= '<button type="button" class="exelearning-download__toggle" aria-haspopup="true" aria-expanded="false" aria-label="'
+                . $view->escapeHtmlAttr($view->translate('More download formats')) . '">';
+            $html .= '<span class="exelearning-download__caret">&#9662;</span>';
+            $html .= '</button>';
+            $html .= '<ul class="exelearning-download__menu" role="menu" hidden>';
+            foreach ($dropdown as $fmt) {
+                $html .= '<li role="none">' . $this->renderDownloadItem($view, $fmt, false) . '</li>';
+            }
+            $html .= '</ul>';
+        }
+
+        $html .= '</div>';
+        return $html;
+    }
+
+    /**
+     * @param array<string, mixed> $fmt
+     */
+    protected function renderDownloadItem(PhpRenderer $view, array $fmt, bool $isPrimary): string
+    {
+        $classes = $isPrimary ? 'exelearning-download__primary' : 'exelearning-download__item';
+        $label = sprintf($view->translate('Download %s'), $view->translate((string) $fmt['label']));
+
+        if ($fmt['id'] === 'elpx') {
+            return sprintf(
+                '<a href="#" class="%s" data-format="%s" data-suffix="%s" download role="%s">'
+                    . '<span class="exelearning-download__label">%s</span>'
+                . '</a>',
+                $view->escapeHtmlAttr($classes),
+                $view->escapeHtmlAttr($fmt['id']),
+                $view->escapeHtmlAttr($fmt['suffix']),
+                $isPrimary ? 'button' : 'menuitem',
+                $view->escapeHtml($label)
+            );
+        }
+
+        return sprintf(
+            '<button type="button" class="%s" data-format="%s" data-suffix="%s" data-mime="%s" role="%s">'
+                . '<span class="exelearning-download__label">%s</span>'
+            . '</button>',
+            $view->escapeHtmlAttr($classes),
+            $view->escapeHtmlAttr($fmt['id']),
+            $view->escapeHtmlAttr($fmt['suffix']),
+            $view->escapeHtmlAttr($fmt['mime']),
+            $isPrimary ? 'button' : 'menuitem',
+            $view->escapeHtml($label)
+        );
     }
 }
