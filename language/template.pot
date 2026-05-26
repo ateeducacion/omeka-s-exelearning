@@ -110,3 +110,39 @@ msgstr ""
 msgid ""
 "Display the \"Edit in eXeLearning\" button for users with edit permissions."
 msgstr ""
+
+#: src/Service/DownloadFormats.php
+msgid "Web"
+msgstr ""
+
+#: src/Service/DownloadFormats.php
+msgid "SCORM 1.2"
+msgstr ""
+
+#: src/Service/DownloadFormats.php
+msgid "IMS Package"
+msgstr ""
+
+#: src/Service/DownloadFormats.php
+msgid "EPUB3"
+msgstr ""
+
+#: src/Service/DownloadFormats.php
+msgid "More download formats"
+msgstr ""
+
+#: src/Media/FileRenderer/ExeLearningRenderer.php
+msgid "Preparing download…"
+msgstr ""
+
+#: src/Media/FileRenderer/ExeLearningRenderer.php
+msgid "Download failed. Please try again."
+msgstr ""
+
+#: src/Form/ConfigForm.php
+msgid "Download formats"
+msgstr ""
+
+#: src/Form/ConfigForm.php
+msgid "Formats offered by the download split-button on embedded eXeLearning content. Non-source formats are produced client-side by the editor exporters bundle."
+msgstr ""

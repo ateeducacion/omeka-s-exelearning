@@ -326,39 +326,46 @@
 }
 
 /* Admin variant — leans on Omeka's own `.button` class for all the
-   interactive elements; we only neutralize the front-end blue container
-   styling so the native Omeka button styling shines through. */
+   interactive elements. Front-end overrides are neutralized with the
+   `revert` keyword so the native Omeka button styling shines through. */
 .exelearning-download--admin {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    color: inherit;
-    overflow: visible;
+    all: unset;
+    position: relative;
     display: inline-flex;
     gap: 4px;
     align-items: stretch;
+    /* Keep the toolbar (and its absolute dropdown) above the iframe stacking
+       context. Without this the iframe — being a sibling later in DOM — paints
+       over the open menu. */
+    z-index: 100;
 }
 .exelearning-download--admin .exelearning-download__primary,
 .exelearning-download--admin .exelearning-download__toggle,
 .exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
-    /* Reset the front-end overrides; the `.button` class added in PHP
-       provides background/border/color. */
-    background: none;
-    color: inherit;
-    border-left: 0;
-    font-size: inherit;
+    /* Revert the front-end overrides so Omeka's native `.button` styling
+       (background, color, border, padding, font) takes effect. */
+    background: revert;
+    color: revert;
+    border: revert;
+    border-radius: revert;
+    padding: revert;
+    font: revert;
+    line-height: revert;
 }
-.exelearning-download--admin .exelearning-download__toggle {
-    padding-left: 8px;
-    padding-right: 8px;
+.exelearning-download--admin .exelearning-download__toggle .exelearning-download__caret {
+    font-size: 12px;
 }
 .exelearning-download--admin .exelearning-download__menu {
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    padding: 0;
+    background: #fff;
+    border: 1px solid #c4c4c4;
+    border-radius: 3px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 4px;
+    z-index: 1001;
 }
 .exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
+    display: block;
     width: 100%;
     text-align: left;
+    margin: 2px 0;
 }
