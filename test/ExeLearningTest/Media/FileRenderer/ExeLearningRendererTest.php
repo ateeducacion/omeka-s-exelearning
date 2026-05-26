@@ -379,8 +379,46 @@ class ExeLearningRendererTest extends TestCase
 
         $result = $renderer->render($view, $media);
 
-        $this->assertStringContainsString('exelearning-download-btn', $result);
+        $this->assertStringContainsString('exelearning-download', $result);
+        $this->assertStringContainsString('data-format="elpx"', $result);
+        $this->assertStringContainsString('data-suffix=".elpx"', $result);
         $this->assertStringContainsString('Download', $result);
+    }
+
+    public function testRenderIncludesMultiFormatSplitButton(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+
+        $elpService = $this->createMock(ElpFileService::class);
+        $elpService->method('getMediaHash')->willReturn($hash);
+        $elpService->method('hasPreview')->willReturn(true);
+
+        $renderer = new ExeLearningRenderer($elpService, $this->createMockRequest());
+
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+        $media = new MediaRepresentation(
+            'http://example.com/original/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            [
+                'exelearning_extracted_hash' => $hash,
+                'exelearning_has_preview' => '1',
+            ]
+        );
+
+        $result = $renderer->render($view, $media);
+
+        // All default formats should appear in the dropdown / primary action.
+        foreach (['elpx', 'html5', 'scorm12', 'ims', 'epub3'] as $id) {
+            $this->assertStringContainsString('data-format="' . $id . '"', $result);
+        }
+        $this->assertStringContainsString('_web.zip', $result);
+        $this->assertStringContainsString('_scorm.zip', $result);
+        $this->assertStringContainsString('_ims.zip', $result);
+        $this->assertStringContainsString('.epub', $result);
+        $this->assertStringContainsString('exelearning-download__toggle', $result);
+        $this->assertStringContainsString('exelearning-download__menu', $result);
     }
 
     public function testRenderIncludesFullscreenButton(): void
