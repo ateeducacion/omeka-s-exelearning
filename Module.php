@@ -748,7 +748,7 @@ JS
             $storedFormats = is_array($decoded) ? $decoded : null;
         }
         if (!is_array($storedFormats)) {
-            $storedFormats = DownloadFormats::defaultIds();
+            $storedFormats = DownloadFormats::enabledByDefault();
         }
 
         $form->setData([

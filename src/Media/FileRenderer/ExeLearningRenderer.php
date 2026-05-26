@@ -308,7 +308,7 @@ class ExeLearningRenderer implements RendererInterface
             $setting = $view->getHelperPluginManager()->get('setting');
             $stored = $setting('exelearning_download_formats', null);
             if ($stored === null) {
-                return DownloadFormats::defaultIds();
+                return DownloadFormats::enabledByDefault();
             }
             if (is_string($stored)) {
                 $decoded = json_decode($stored, true);
@@ -318,7 +318,7 @@ class ExeLearningRenderer implements RendererInterface
             }
             return DownloadFormats::sanitize($stored);
         } catch (\Exception $e) {
-            return DownloadFormats::defaultIds();
+            return DownloadFormats::enabledByDefault();
         }
     }
 }

@@ -89,9 +89,14 @@ final class DownloadFormatsTest extends TestCase
         $this->assertNull(DownloadFormats::get('does-not-exist'));
     }
 
-    public function testFromSettingsFallsBackToDefaultsWhenSettingsNull(): void
+    public function testEnabledByDefaultIsConservativeSubset(): void
     {
-        $this->assertSame(DownloadFormats::defaultIds(), DownloadFormats::fromSettings(null));
+        $this->assertSame(['elpx', 'html5', 'scorm12'], DownloadFormats::enabledByDefault());
+    }
+
+    public function testFromSettingsFallsBackToEnabledByDefaultWhenSettingsNull(): void
+    {
+        $this->assertSame(DownloadFormats::enabledByDefault(), DownloadFormats::fromSettings(null));
     }
 
     public function testFromSettingsReadsStoredArray(): void
@@ -126,7 +131,7 @@ final class DownloadFormatsTest extends TestCase
                 return $default;
             }
         };
-        $this->assertSame(DownloadFormats::defaultIds(), DownloadFormats::fromSettings($settings));
+        $this->assertSame(DownloadFormats::enabledByDefault(), DownloadFormats::fromSettings($settings));
     }
 
     public function testRenderSplitButtonReturnsEmptyForEmptyList(): void

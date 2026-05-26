@@ -409,14 +409,15 @@ class ExeLearningRendererTest extends TestCase
 
         $result = $renderer->render($view, $media);
 
-        // All default formats should appear in the dropdown / primary action.
-        foreach (['elpx', 'html5', 'scorm12', 'ims', 'epub3'] as $id) {
+        // Default formats are the conservative subset (elpx, html5, scorm12).
+        foreach (['elpx', 'html5', 'scorm12'] as $id) {
             $this->assertStringContainsString('data-format="' . $id . '"', $result);
         }
+        // IMS and EPUB3 are opt-in — not enabled by default.
+        $this->assertStringNotContainsString('data-format="ims"', $result);
+        $this->assertStringNotContainsString('data-format="epub3"', $result);
         $this->assertStringContainsString('_web.zip', $result);
         $this->assertStringContainsString('_scorm.zip', $result);
-        $this->assertStringContainsString('_ims.zip', $result);
-        $this->assertStringContainsString('.epub', $result);
         $this->assertStringContainsString('exelearning-download__toggle', $result);
         $this->assertStringContainsString('exelearning-download__menu', $result);
     }

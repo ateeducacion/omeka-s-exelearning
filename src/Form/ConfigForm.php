@@ -61,7 +61,7 @@ class ConfigForm extends Form
                 'value_options' => $valueOptions,
             ],
             'attributes' => [
-                'value' => DownloadFormats::defaultIds(),
+                'value' => DownloadFormats::enabledByDefault(),
             ],
         ]);
     }

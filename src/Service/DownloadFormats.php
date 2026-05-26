@@ -56,11 +56,27 @@ final class DownloadFormats
     }
 
     /**
+     * Canonical whitelist of every known format id (used as a sanitizer
+     * allowlist).
+     *
      * @return string[]
      */
     public static function defaultIds(): array
     {
         return array_map(static fn ($f) => $f['id'], self::all());
+    }
+
+    /**
+     * Formats enabled by default when the module is freshly configured.
+     *
+     * Conservative subset (elpx + html5 + scorm12); the admin can opt
+     * into IMS / EPUB3 from Module → Settings.
+     *
+     * @return string[]
+     */
+    public static function enabledByDefault(): array
+    {
+        return ['elpx', 'html5', 'scorm12'];
     }
 
     /**
@@ -112,7 +128,7 @@ final class DownloadFormats
     public static function fromSettings($settings): array
     {
         if (!$settings || !is_object($settings) || !method_exists($settings, 'get')) {
-            return self::defaultIds();
+            return self::enabledByDefault();
         }
         $stored = $settings->get('exelearning_download_formats', null);
         if (is_string($stored)) {
@@ -121,7 +137,7 @@ final class DownloadFormats
                 $stored = $decoded;
             }
         }
-        return $stored === null ? self::defaultIds() : self::sanitize($stored);
+        return $stored === null ? self::enabledByDefault() : self::sanitize($stored);
     }
 
     /**

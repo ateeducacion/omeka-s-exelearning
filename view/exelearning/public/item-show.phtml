@@ -16,7 +16,7 @@ try {
     $exeStoredFormats = null;
 }
 $exeFormatIds = $exeStoredFormats === null
-    ? DownloadFormats::defaultIds()
+    ? DownloadFormats::enabledByDefault()
     : DownloadFormats::sanitize($exeStoredFormats);
 $exeShowDownload = !empty($exeFormatIds);
 if ($exeShowDownload) {
