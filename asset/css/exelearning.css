@@ -246,14 +246,17 @@
     opacity: 0;
 }
 
-/* Multi-format split download button */
+/* ----------------------------------------------------------------------
+   Multi-format split download button — front-end (blue) variant
+   --------------------------------------------------------------------
+   Every rule below is scoped to `:not(.exelearning-download--admin)` so
+   the front styling never leaks into the admin variant, where Omeka's
+   own `.button` class must drive the look.
+   ---------------------------------------------------------------- */
 .exelearning-download {
     position: relative;
     display: inline-flex;
     align-items: stretch;
-    background: #087cb8;
-    border-radius: 4px;
-    color: #fff;
     overflow: visible;
 }
 
@@ -262,9 +265,15 @@
     pointer-events: none;
 }
 
-.exelearning-download__primary,
-.exelearning-download__toggle,
-.exelearning-download__item {
+.exelearning-download:not(.exelearning-download--admin) {
+    background: #087cb8;
+    border-radius: 4px;
+    color: #fff;
+}
+
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__primary,
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__toggle,
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__item {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -278,18 +287,18 @@
     line-height: 1.2;
 }
 
-.exelearning-download__primary:hover,
-.exelearning-download__toggle:hover {
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__primary:hover,
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__toggle:hover {
     background: rgba(0, 0, 0, 0.15);
     color: #fff;
 }
 
-.exelearning-download__toggle {
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__toggle {
     border-left: 1px solid rgba(255, 255, 255, 0.25);
     padding: 6px 8px;
 }
 
-.exelearning-download__menu {
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__menu {
     position: absolute;
     top: 100%;
     right: 0;
@@ -305,7 +314,7 @@
     z-index: 1000;
 }
 
-.exelearning-download__menu .exelearning-download__item {
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__menu .exelearning-download__item {
     width: 100%;
     color: #212529;
     padding: 8px 14px;
@@ -313,7 +322,7 @@
     text-align: left;
 }
 
-.exelearning-download__menu .exelearning-download__item:hover {
+.exelearning-download:not(.exelearning-download--admin) .exelearning-download__menu .exelearning-download__item:hover {
     background: #f1f3f5;
     color: #212529;
 }
@@ -325,47 +334,39 @@
     align-self: center;
 }
 
-/* Admin variant — leans on Omeka's own `.button` class for all the
-   interactive elements. Front-end overrides are neutralized with the
-   `revert` keyword so the native Omeka button styling shines through. */
+/* ----------------------------------------------------------------------
+   Admin variant — lean on Omeka's own .button class. The only thing we
+   set here is the layout glue (gap between buttons, dropdown position
+   and z-index above the iframe). The .button class added in PHP brings
+   all the background/border/color/padding.
+   ---------------------------------------------------------------- */
 .exelearning-download--admin {
-    all: unset;
-    position: relative;
-    display: inline-flex;
+    /* Layout only — no colours, no padding, no borders. */
     gap: 4px;
-    align-items: stretch;
-    /* Keep the toolbar (and its absolute dropdown) above the iframe stacking
-       context. Without this the iframe — being a sibling later in DOM — paints
-       over the open menu. */
+    align-items: center;
+    /* Keep the toolbar (and its absolute dropdown) above the preview
+       iframe stacking context. */
     z-index: 100;
 }
-.exelearning-download--admin .exelearning-download__primary,
-.exelearning-download--admin .exelearning-download__toggle,
-.exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
-    /* Revert the front-end overrides so Omeka's native `.button` styling
-       (background, color, border, padding, font) takes effect. */
-    background: revert;
-    color: revert;
-    border: revert;
-    border-radius: revert;
-    padding: revert;
-    font: revert;
-    line-height: revert;
-}
-.exelearning-download--admin .exelearning-download__toggle .exelearning-download__caret {
-    font-size: 12px;
-}
+
 .exelearning-download--admin .exelearning-download__menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin: 4px 0 0;
+    list-style: none;
+    padding: 4px;
+    min-width: 180px;
     background: #fff;
     border: 1px solid #c4c4c4;
     border-radius: 3px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    padding: 4px;
     z-index: 1001;
 }
+
 .exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
     display: block;
     width: 100%;
-    text-align: left;
     margin: 2px 0;
+    text-align: left;
 }
