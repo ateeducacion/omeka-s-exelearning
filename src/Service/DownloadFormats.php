@@ -174,7 +174,11 @@ final class DownloadFormats
         $html .= self::renderItem($view, $primary, true, $variant);
 
         if (!empty($dropdown)) {
-            $html .= '<button type="button" class="exelearning-download__toggle" aria-haspopup="true" aria-expanded="false" aria-label="'
+            $toggleClasses = 'exelearning-download__toggle';
+            if ($variant === 'admin') {
+                $toggleClasses .= ' button';
+            }
+            $html .= '<button type="button" class="' . $toggleClasses . '" aria-haspopup="true" aria-expanded="false" aria-label="'
                 . $view->escapeHtmlAttr($view->translate('More download formats')) . '">';
             $html .= '<span class="exelearning-download__caret">&#9662;</span>';
             $html .= '</button>';
@@ -219,6 +223,11 @@ final class DownloadFormats
     private static function renderItem($view, array $fmt, bool $isPrimary, string $variant = 'default'): string
     {
         $classes = $isPrimary ? 'exelearning-download__primary' : 'exelearning-download__item';
+        // Reuse Omeka's native `.button` class in admin so the items pick up
+        // the real admin button styling instead of a custom approximation.
+        if ($variant === 'admin') {
+            $classes .= ' button';
+        }
         $label = $view->translate((string) $fmt['label']);
 
         // Match the original admin download button: a leading o-icon-download

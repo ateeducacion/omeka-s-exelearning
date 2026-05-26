@@ -325,9 +325,9 @@
     align-self: center;
 }
 
-/* Admin variant — keep the primary "Download .elpx" looking like the
-   original Omeka admin button, and render the dropdown toggle as a
-   separate small button next to it. */
+/* Admin variant — leans on Omeka's own `.button` class for all the
+   interactive elements; we only neutralize the front-end blue container
+   styling so the native Omeka button styling shines through. */
 .exelearning-download--admin {
     background: transparent;
     border: 0;
@@ -339,38 +339,26 @@
     align-items: stretch;
 }
 .exelearning-download--admin .exelearning-download__primary,
-.exelearning-download--admin .exelearning-download__toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: #fff;
-    color: #353535;
-    border: 1px solid #c4c4c4;
-    border-radius: 3px;
-    font-size: 13px;
-    line-height: 1.4;
-    text-decoration: none;
-    cursor: pointer;
-}
-.exelearning-download--admin .exelearning-download__primary:hover,
-.exelearning-download--admin .exelearning-download__toggle:hover {
-    background: #f1f1f1;
-    color: #353535;
+.exelearning-download--admin .exelearning-download__toggle,
+.exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
+    /* Reset the front-end overrides; the `.button` class added in PHP
+       provides background/border/color. */
+    background: none;
+    color: inherit;
+    border-left: 0;
+    font-size: inherit;
 }
 .exelearning-download--admin .exelearning-download__toggle {
-    padding: 4px 6px;
+    padding-left: 8px;
+    padding-right: 8px;
 }
 .exelearning-download--admin .exelearning-download__menu {
-    border-color: #c4c4c4;
-    font-size: 13px;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
 }
 .exelearning-download--admin .exelearning-download__menu .exelearning-download__item {
-    color: #353535;
-    background: transparent;
-    padding: 6px 12px;
-}
-.exelearning-download--admin .exelearning-download__menu .exelearning-download__item:hover {
-    background: #f1f1f1;
-    color: #353535;
+    width: 100%;
+    text-align: left;
 }
