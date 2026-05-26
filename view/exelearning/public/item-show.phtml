@@ -81,10 +81,6 @@ if ($exeShowDownload) {
             </a>
             <?php if ($exeShowDownload): ?>
                 <?= DownloadFormats::renderSplitButton($this, $media, $exeFormatIds) ?>
-            <?php else: ?>
-                <a href="<?= $this->escapeHtmlAttr($media->originalUrl()) ?>" download="<?= $this->escapeHtmlAttr($media->source()) ?>">
-                    <?= $this->translate('Download') ?>
-                </a>
             <?php endif; ?>
         </div>
     </div>
