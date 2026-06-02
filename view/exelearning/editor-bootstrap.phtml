@@ -140,7 +140,21 @@ $configScript = <<<SCRIPT
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.register = function() {
                 console.log("[Omeka Mode] Service worker registration disabled");
-                return Promise.resolve({ scope: "" });
+                // Return a ServiceWorkerRegistration-like stub: the editor
+                // (v4.0.0+) calls reg.addEventListener()/update() on the result,
+                // and a bare { scope: "" } made that throw
+                // ("addEventListener is not a function"), aborting editor boot
+                // inside the hidden export iframe so Web/SCORM/etc. never built.
+                return Promise.resolve({
+                    scope: "",
+                    installing: null,
+                    waiting: null,
+                    active: null,
+                    addEventListener: function() {},
+                    removeEventListener: function() {},
+                    update: function() { return Promise.resolve(); },
+                    unregister: function() { return Promise.resolve(true); }
+                });
             };
         }
 
