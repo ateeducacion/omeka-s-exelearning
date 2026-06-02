@@ -91,7 +91,7 @@ if ($canEdit && $editorInstalled) {
 <div class="exelearning-admin-viewer">
     <h4><?= $this->translate('eXeLearning Preview') ?></h4>
     <div class="viewer-controls">
-        <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank" class="button" id="exe-open-tab-link">
+        <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank" rel="noopener noreferrer" class="button" id="exe-open-tab-link">
             <span class="o-icon-external" aria-hidden="true"></span>
             <?= $this->translate('Open in new tab') ?>
         </a>
@@ -116,7 +116,7 @@ if ($canEdit && $editorInstalled) {
     <iframe
         class="preview-iframe"
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
-        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>

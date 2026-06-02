@@ -150,9 +150,74 @@ class StylesServeControllerTest extends TestCase
         $this->assertSame(404, $result->getStatusCode());
     }
 
+    public function testServeStyleCssHasFrameOptionsButNoCsp(): void
+    {
+        $this->installFakeStyle('acme', 'body{}');
+        $this->bindResponse();
+        $result = $this->controller->serveStyle('acme', 'style.css');
+        $headers = $result->getHeaders();
+        $this->assertSame('SAMEORIGIN', $headers->get('X-Frame-Options')->getFieldValue());
+        $this->assertNotNull($headers->get('X-Content-Type-Options'));
+        // CSS is passive — no sandboxed CSP / attachment forced.
+        $this->assertNull($headers->get('Content-Security-Policy'));
+        $this->assertNull($headers->get('Content-Disposition'));
+    }
+
+    public function testServeStyleSvgIsSandboxedAndForcedAttachment(): void
+    {
+        $this->installStyleWithFile('iconic', 'icons/x.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+        $this->bindResponse();
+        $result = $this->controller->serveStyle('iconic', 'icons/x.svg');
+        $this->assertSame(200, $result->getStatusCode());
+        $headers = $result->getHeaders();
+        $csp = $headers->get('Content-Security-Policy');
+        $this->assertNotNull($csp, "SVG style asset must carry a CSP");
+        $this->assertStringContainsString("script-src 'none'", $csp->getFieldValue());
+        $this->assertStringContainsString('sandbox', $csp->getFieldValue());
+        $this->assertSame('attachment', $headers->get('Content-Disposition')->getFieldValue());
+    }
+
+    public function testServeStyleHtmlIsSandboxed(): void
+    {
+        $this->installStyleWithFile('htmlish', 'page.html', '<html><body><script>alert(1)</script></body></html>');
+        $this->bindResponse();
+        $result = $this->controller->serveStyle('htmlish', 'page.html');
+        $csp = $result->getHeaders()->get('Content-Security-Policy');
+        $this->assertNotNull($csp);
+        $this->assertStringContainsString("default-src 'none'", $csp->getFieldValue());
+    }
+
+    public function testIsActiveDocumentTypeMatchesScriptableTypes(): void
+    {
+        $ref = new ReflectionClass($this->controller);
+        $m = $ref->getMethod('isActiveDocumentType');
+        $m->setAccessible(true);
+        $this->assertTrue($m->invoke($this->controller, 'image/svg+xml'));
+        $this->assertTrue($m->invoke($this->controller, 'text/html'));
+        $this->assertTrue($m->invoke($this->controller, 'application/javascript'));
+        $this->assertTrue($m->invoke($this->controller, 'application/xml'));
+        $this->assertFalse($m->invoke($this->controller, 'text/css'));
+        $this->assertFalse($m->invoke($this->controller, 'image/png'));
+    }
+
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    private function installStyleWithFile(string $slug, string $path, string $body): void
+    {
+        $zipPath = $this->tmpRoot . '/' . $slug . '.zip';
+        $zip = new \ZipArchive();
+        $zip->open($zipPath, \ZipArchive::CREATE);
+        $zip->addFromString('config.xml',
+            '<?xml version="1.0"?><theme><name>' . $slug . '</name><version>1.0</version></theme>'
+        );
+        $zip->addFromString('style.css', 'body{}');
+        $zip->addFromString($path, $body);
+        $zip->close();
+        $this->svc->installFromZip($zipPath, $slug . '.zip');
+        @unlink($zipPath);
+    }
 
     private function invokePrivate(string $name, array $args)
     {

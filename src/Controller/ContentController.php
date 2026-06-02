@@ -182,7 +182,36 @@ class ContentController extends AbstractActionController
                 'Permissions-Policy',
                 'geolocation=(), microphone=(), camera=(), payment=()'
             );
+        } elseif ($this->isActiveDocumentType($mimeType)) {
+            // SVG/XML can carry inline <script> and are served same-origin from
+            // an attacker-controlled .elpx. A bitmap loaded via <img> ignores
+            // these directives, but a victim navigating directly to the file
+            // (or framing it) would otherwise execute its scripts in the Omeka
+            // origin. Neutralize with a script-free, sandboxed CSP.
+            $headers->addHeaderLine('Content-Security-Policy', implode('; ', [
+                "default-src 'none'",
+                "style-src 'unsafe-inline'",
+                "img-src 'self' data:",
+                "script-src 'none'",
+                "frame-ancestors 'self'",
+                'sandbox',
+            ]));
+            $headers->addHeaderLine('Referrer-Policy', 'same-origin');
         }
+    }
+
+    /**
+     * Whether a served MIME type can execute script when treated as a
+     * top-level document or framed (e.g. SVG, XML), and therefore needs a
+     * script-free, sandboxed CSP even though it is not HTML.
+     *
+     * @param string $mimeType
+     * @return bool
+     */
+    protected function isActiveDocumentType(string $mimeType): bool
+    {
+        return strpos($mimeType, 'svg') !== false
+            || strpos($mimeType, 'xml') !== false;
     }
 
     /**

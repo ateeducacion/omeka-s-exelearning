@@ -76,7 +76,7 @@ if ($exeShowDownload) {
     <div class="viewer-header">
         <h3 class="viewer-title"><?= $this->escapeHtml($media->displayTitle()) ?></h3>
         <div class="viewer-actions">
-            <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank">
+            <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank" rel="noopener noreferrer">
                 <?= $this->translate('Open fullscreen') ?>
             </a>
             <?php if ($exeShowDownload): ?>
@@ -86,7 +86,7 @@ if ($exeShowDownload) {
     </div>
     <iframe
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
-        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>
