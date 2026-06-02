@@ -232,8 +232,10 @@ class Module extends AbstractModule
             $hash = $elpService->getMediaHash($media);
             $hasPreview = $elpService->hasPreview($media);
 
-            // Auto-process if not yet extracted
-            if (!$hash || !$hasPreview) {
+            // Auto-process once. Gate on the processed marker (not hasPreview)
+            // so a legitimately preview-less package is not re-extracted on
+            // every view, which would accumulate orphan extraction directories.
+            if (!$elpService->isProcessed($media)) {
                 $logger->info(sprintf('[ExeLearning] Auto-processing media %d on public view', $media->id()));
                 try {
                     $result = $elpService->processUploadedFile($media);
@@ -284,8 +286,8 @@ class Module extends AbstractModule
         $hash = $elpService->getMediaHash($media);
         $hasPreview = $elpService->hasPreview($media);
 
-        // Auto-process if not yet extracted
-        if (!$hash || !$hasPreview) {
+        // Auto-process once (gate on the processed marker, not hasPreview).
+        if (!$elpService->isProcessed($media)) {
             $logger->info(sprintf('[ExeLearning] Auto-processing media %d on view', $media->id()));
             try {
                 $result = $elpService->processUploadedFile($media);

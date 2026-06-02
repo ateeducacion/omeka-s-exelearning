@@ -92,72 +92,102 @@ class ElpFileService
         $this->log('info', sprintf('Processing media %d', $media->id()));
 
         $filePath = $this->getMediaFilePath($media);
-        $this->log('info', sprintf('File path: %s', $filePath));
-
         if (!file_exists($filePath)) {
             $this->log('err', sprintf('File not found: %s', $filePath));
             throw new \Exception('Media file not found: ' . $filePath);
         }
 
-        $this->log('info', sprintf('File exists, size: %d bytes', filesize($filePath)));
+        // Remember any prior extraction so we can drop it after a successful
+        // re-process (otherwise every re-process leaks an orphan directory).
+        $oldHash = $this->getMediaHash($media);
 
-        // Generate unique hash
-        $hash = $this->generateHash($filePath);
-        $this->log('info', sprintf('Generated hash: %s', $hash));
-
-        // Ensure base path exists
-        if (!is_dir($this->basePath)) {
-            $this->log('info', sprintf('Creating base path: %s', $this->basePath));
-            if (!@mkdir($this->basePath, 0755, true)) {
-                $error = error_get_last();
-                $this->log('err', sprintf('Failed to create base path: %s - Error: %s', $this->basePath, $error['message'] ?? 'unknown'));
-                throw new \Exception('Failed to create base directory: ' . $this->basePath);
-            }
-            // Create security .htaccess to prevent direct access
-            $this->createSecurityHtaccess();
-        } else {
-            $this->log('info', sprintf('Base path already exists: %s, writable: %s', $this->basePath, is_writable($this->basePath) ? 'yes' : 'no'));
-            // Ensure .htaccess exists even if directory already exists
-            if (!file_exists($this->basePath . '/.htaccess')) {
-                $this->createSecurityHtaccess();
-            }
+        // Only extract genuine eXeLearning packages. Anything else is marked
+        // processed so the view hooks do not re-check (and re-extract) it on
+        // every render.
+        if (!$this->validateElpFile($filePath)) {
+            $this->log('info', sprintf('Media %d is not a valid eXeLearning package; skipping extraction', $media->id()));
+            $this->updateMediaData($media, [
+                'exelearning_has_preview' => '0',
+                'exelearning_has_screenshot' => '0',
+                'exelearning_processed' => '1',
+            ]);
+            return [
+                'hash' => $oldHash,
+                'hasPreview' => false,
+                'hasScreenshot' => false,
+                'extractPath' => null,
+            ];
         }
 
-        // Extract to data directory
+        $hash = $this->generateHash($filePath);
+        $this->ensureBasePath();
+
         $extractPath = $this->basePath . '/' . $hash;
         $this->log('info', sprintf('Extracting to: %s', $extractPath));
         $this->extractZip($filePath, $extractPath);
 
-        // Check if index.html exists
-        $hasPreview = file_exists($extractPath . '/index.html');
-        $this->log('info', sprintf('Has preview (index.html): %s', $hasPreview ? 'yes' : 'no'));
+        $result = $this->finalizeExtraction($media, $extractPath, $hash);
 
-        // Detect bundled screenshot.png (used as media thumbnail).
-        $screenshotPath = $extractPath . '/' . self::SCREENSHOT_FILENAME;
-        $hasScreenshot = file_exists($screenshotPath);
-        $this->log('info', sprintf('Has screenshot.png: %s', $hasScreenshot ? 'yes' : 'no'));
-
-        // List extracted files for debugging
-        if (is_dir($extractPath)) {
-            $files = scandir($extractPath);
-            $this->log('info', sprintf('Extracted files: %s', implode(', ', array_slice($files, 0, 10))));
+        // Drop the previous extraction now that the new one is committed.
+        if ($oldHash && $oldHash !== $hash) {
+            $this->deleteDirectory($this->basePath . '/' . $oldHash);
         }
 
-        // Store metadata using Omeka's data system
-        $this->log('info', 'Updating media data...');
+        $this->log('info', 'Processing complete');
+        return $result;
+    }
+
+    /**
+     * Ensure the extraction base directory and its blocking .htaccess exist.
+     *
+     * @throws \Exception
+     *
+     * @codeCoverageIgnore
+     */
+    private function ensureBasePath(): void
+    {
+        if (!is_dir($this->basePath)) {
+            if (!@mkdir($this->basePath, 0755, true) && !is_dir($this->basePath)) {
+                $error = error_get_last();
+                throw new \Exception(
+                    'Failed to create base directory: ' . $this->basePath
+                    . ' - ' . ($error['message'] ?? 'unknown')
+                );
+            }
+            $this->createSecurityHtaccess();
+        } elseif (!file_exists($this->basePath . '/.htaccess')) {
+            $this->createSecurityHtaccess();
+        }
+    }
+
+    /**
+     * Detect preview/screenshot in a fresh extraction, persist the metadata
+     * (including the processed marker) and build thumbnails.
+     *
+     * @param MediaRepresentation $media
+     * @param string $extractPath
+     * @param string $hash
+     * @return array
+     *
+     * @codeCoverageIgnore
+     */
+    private function finalizeExtraction(MediaRepresentation $media, string $extractPath, string $hash): array
+    {
+        $hasPreview = file_exists($extractPath . '/index.html');
+        $screenshotPath = $extractPath . '/' . self::SCREENSHOT_FILENAME;
+        $hasScreenshot = file_exists($screenshotPath);
+
         $this->updateMediaData($media, [
             'exelearning_extracted_hash' => $hash,
             'exelearning_has_preview' => $hasPreview ? '1' : '0',
             'exelearning_has_screenshot' => $hasScreenshot ? '1' : '0',
+            'exelearning_processed' => '1',
         ]);
 
-        // Generate Omeka thumbnail derivatives from screenshot.png.
-        // This is best-effort: failures must not break upload processing.
+        // Best-effort: a faulty screenshot must never block ingestion.
         if ($hasScreenshot) {
             $this->generateThumbnailsFromScreenshot($media, $screenshotPath);
         }
-
-        $this->log('info', 'Processing complete');
 
         return [
             'hash' => $hash,
@@ -179,29 +209,47 @@ class ElpFileService
      */
     public function replaceFile(MediaRepresentation $media, string $newFilePath): array
     {
-        // Get old hash to cleanup
-        $oldHash = $this->getMediaHash($media);
-
-        // Get the original file path
-        $originalPath = $this->getMediaFilePath($media);
-
         // Validate the new file
         if (!$this->validateElpFile($newFilePath)) {
             throw new \Exception('Invalid eXeLearning file');
         }
 
-        // Replace the file
-        if (!copy($newFilePath, $originalPath)) {
-            throw new \Exception('Failed to replace file');
+        $originalPath = $this->getMediaFilePath($media);
+        $oldHash = $this->getMediaHash($media);
+
+        // 1. Extract the NEW upload into a fresh staging dir FIRST. A corrupt or
+        //    unextractable archive throws here, leaving the original file, its
+        //    existing extraction and the media data untouched (transactional
+        //    save — no data loss on failure).
+        $newHash = $this->generateHash($newFilePath);
+        $this->ensureBasePath();
+        $stagingPath = $this->basePath . '/' . $newHash;
+        try {
+            $this->extractZip($newFilePath, $stagingPath);
+        } catch (\Throwable $e) {
+            $this->deleteDirectory($stagingPath);
+            throw $e;
         }
 
-        // Clean up old extracted content
-        if ($oldHash) {
+        // 2. Commit: overwrite the original, verifying the copy landed intact
+        //    (guards against truncated writes, e.g. php-wasm OPFS quota).
+        $expectedSize = filesize($newFilePath);
+        if (!copy($newFilePath, $originalPath)) {
+            $this->deleteDirectory($stagingPath);
+            throw new \Exception('Failed to replace file');
+        }
+        if ($expectedSize !== false && filesize($originalPath) !== $expectedSize) {
+            $this->deleteDirectory($stagingPath);
+            throw new \Exception('File copy verification failed (size mismatch)');
+        }
+
+        // 3. Point the media at the new extraction, then (only now) drop the old.
+        $result = $this->finalizeExtraction($media, $stagingPath, $newHash);
+        if ($oldHash && $oldHash !== $newHash) {
             $this->deleteDirectory($this->basePath . '/' . $oldHash);
         }
 
-        // Process the new file
-        return $this->processUploadedFile($media);
+        return $result;
     }
 
     /**
@@ -268,6 +316,22 @@ class ElpFileService
     {
         $data = $media->mediaData();
         return ($data['exelearning_has_preview'] ?? '0') === '1';
+    }
+
+    /**
+     * Whether this media has already been processed (extracted or rejected).
+     *
+     * Used by the view hooks to avoid re-extracting on every page view — a
+     * preview-less but already-processed package would otherwise be re-ingested
+     * on every render, accumulating orphan extraction directories.
+     *
+     * @param MediaRepresentation $media
+     * @return bool
+     */
+    public function isProcessed(MediaRepresentation $media): bool
+    {
+        $data = $media->mediaData();
+        return ($data['exelearning_processed'] ?? '0') === '1';
     }
 
     /**
@@ -404,24 +468,20 @@ class ElpFileService
     {
         // Create directory if needed
         if (!is_dir($extractPath)) {
-            if (!@mkdir($extractPath, 0755, true)) {
+            if (!@mkdir($extractPath, 0755, true) && !is_dir($extractPath)) {
                 throw new \Exception('Failed to create extract directory: ' . $extractPath);
             }
         }
 
-        $zip = new ZipArchive();
-        $result = $zip->open($zipPath);
-
-        if ($result !== true) {
-            throw new \Exception('Failed to open ZIP file: error code ' . $result);
+        // The .elpx is attacker-controlled: extract entry-by-entry with zip-slip
+        // rejection and an uncompressed-size/entry-count cap (zip-bomb), instead
+        // of a blind ZipArchive::extractTo().
+        try {
+            ZipSafety::extractFile($zipPath, $extractPath);
+        } catch (\RuntimeException $e) {
+            throw new \Exception('Failed to extract ZIP file to: ' . $extractPath . ' (' . $e->getMessage() . ')');
         }
 
-        if (!$zip->extractTo($extractPath)) {
-            $zip->close();
-            throw new \Exception('Failed to extract ZIP file to: ' . $extractPath);
-        }
-
-        $zip->close();
         $this->log('info', sprintf('ZIP extracted successfully to %s', $extractPath));
     }
 
