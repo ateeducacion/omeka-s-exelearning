@@ -15,6 +15,23 @@
         return;
     }
 
+    // Origins we trust for parent<->iframe messaging. The editor iframe is
+    // embedded same-origin, so the parent origin equals our own; fall back to
+    // it when the embedding config is absent. Used to (a) target every
+    // postMessage to the real parent instead of '*' (so exported package bytes
+    // never leak to a hostile framing origin) and (b) reject inbound messages
+    // that do not come from the parent window at a trusted origin.
+    var EMBED = window.__EXE_EMBEDDING_CONFIG__ || {};
+    var TRUSTED_ORIGINS = (Array.isArray(EMBED.trustedOrigins) && EMBED.trustedOrigins.length)
+        ? EMBED.trustedOrigins
+        : [EMBED.parentOrigin || window.location.origin];
+    var PARENT_ORIGIN = TRUSTED_ORIGINS[0] || window.location.origin;
+
+    function isTrustedMessage(event) {
+        return event.source === window.parent
+            && TRUSTED_ORIGINS.indexOf(event.origin) !== -1;
+    }
+
     console.log('[Omeka-EXE Bridge] Initializing with config:', config);
 
     var monitoredYdoc = null;
@@ -26,7 +43,7 @@
      */
     function postProtocolMessage(message) {
         if (window.parent && window.parent !== window) {
-            window.parent.postMessage(message, '*');
+            window.parent.postMessage(message, PARENT_ORIGIN);
         }
     }
 
@@ -249,7 +266,7 @@
                     filename: result.filename || ('project.' + format),
                     mimeType: mime,
                     size: bytes.byteLength,
-                }, '*');
+                }, PARENT_ORIGIN);
             }
         } catch (error) {
             console.error('[Omeka-EXE Bridge] Export failed:', error);
@@ -258,7 +275,7 @@
                     type: 'OMEKA_REQUEST_EXPORT_ERROR',
                     requestId: requestId,
                     error: error.message || 'Export failed',
-                }, '*');
+                }, PARENT_ORIGIN);
             }
         }
     }
@@ -269,7 +286,7 @@
     async function saveToOmeka() {
         // Notify parent window that save is starting
         if (window.parent !== window) {
-            window.parent.postMessage({ type: 'exelearning-save-start' }, '*');
+            window.parent.postMessage({ type: 'exelearning-save-start' }, PARENT_ORIGIN);
         }
 
         try {
@@ -350,7 +367,7 @@
                         type: 'exelearning-save-complete',
                         mediaId: config.mediaId,
                         contentPath: saveResult.contentPath
-                    }, '*');
+                    }, PARENT_ORIGIN);
                 }
             } else {
                 throw new Error(saveResult.message || 'Save failed');
@@ -361,7 +378,7 @@
 
             // Notify parent window that save failed
             if (window.parent !== window) {
-                window.parent.postMessage({ type: 'exelearning-save-error', message: error.message }, '*');
+                window.parent.postMessage({ type: 'exelearning-save-error', message: error.message }, PARENT_ORIGIN);
             }
         }
     }
@@ -411,7 +428,7 @@
 
             // Notify parent window that bridge is ready
             if (window.parent !== window) {
-                window.parent.postMessage({ type: 'exelearning-bridge-ready' }, '*');
+                window.parent.postMessage({ type: 'exelearning-bridge-ready' }, PARENT_ORIGIN);
             }
 
             // Listen for save shortcuts (Ctrl+S / Cmd+S)
@@ -422,8 +439,13 @@
                 }
             });
 
-            // Listen for messages from parent window
+            // Listen for messages from parent window. Reject anything that is
+            // not from the parent window at a trusted origin so a hostile
+            // framing page (or other frame) cannot drive save/export.
             window.addEventListener('message', function(event) {
+                if (!isTrustedMessage(event)) {
+                    return;
+                }
                 if (event.data?.type === 'exelearning-request-save') {
                     saveToOmeka();
                 }

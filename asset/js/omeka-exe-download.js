@@ -117,9 +117,11 @@
             }
             var requestId = 'exe-' + (nextRequestId++);
             pendingExports[requestId] = { resolve: resolve, reject: reject };
+            // The export iframe is same-origin; target it explicitly rather
+            // than '*' so the request can never reach a cross-origin document.
             iframeEl.contentWindow.postMessage(
                 { type: 'OMEKA_REQUEST_EXPORT', requestId: requestId, data: { format: format } },
-                '*'
+                window.location.origin
             );
             setTimeout(function() {
                 if (pendingExports[requestId]) {

@@ -278,6 +278,11 @@ $template = preg_replace(
 if (!headers_sent()) {
     header('Content-Type: text/html; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
+    // The editor/export bootstrap must not be framable cross-origin: combined
+    // with the bridge's postMessage origin guard this prevents a hostile page
+    // from framing it and harvesting exported package bytes.
+    header('X-Frame-Options: SAMEORIGIN');
+    header("Content-Security-Policy: frame-ancestors 'self'");
 }
 
 // Output the processed template

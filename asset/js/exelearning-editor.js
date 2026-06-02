@@ -260,6 +260,17 @@
          * @param {MessageEvent} event The message event.
          */
         handleMessage: function(event) {
+            // Only trust messages coming from our own editor iframe at our own
+            // origin. The editor is embedded same-origin; rejecting everything
+            // else stops the sandboxed preview (or any other frame) from
+            // spoofing save-complete/close and silently discarding edits.
+            if (event.origin !== window.location.origin) {
+                return;
+            }
+            if (!this.iframe || event.source !== this.iframe.contentWindow) {
+                return;
+            }
+
             var data = event.data;
 
             if (!data || !data.type) {
