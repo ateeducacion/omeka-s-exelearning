@@ -14,6 +14,8 @@ use Laminas\View\Model\ViewModel;
  */
 class EditorController extends AbstractActionController
 {
+    use CsrfValidationTrait;
+
     /** @var ElpFileService */
     protected $elpService;
 
@@ -277,24 +279,21 @@ class EditorController extends AbstractActionController
             return $this->jsonError(401, 'Unauthorized');
         }
 
-        $csrfToken = $request->getPost('csrf');
-        if (!$csrfToken && method_exists($request, 'getQuery')) {
-            $csrfToken = $request->getQuery('csrf');
-        }
-        if (!$csrfToken) {
-            $header = $request->getHeaders()->get('X-CSRF-Token');
-            if ($header && $header !== false) {
-                $csrfToken = $header->getFieldValue();
-            }
-        }
-        if ($csrfToken) {
-            $csrf = new \Laminas\Validator\Csrf(['name' => 'csrf']);
-            if (!$csrf->isValid($csrfToken)) {
-                return $this->jsonError(403, 'CSRF: Invalid or missing CSRF token');
-            }
+        // CSRF is mandatory: a request that omits the token is rejected.
+        if (!$this->validateCsrf($request)) {
+            return $this->jsonError(403, 'CSRF: Invalid or missing CSRF token');
         }
 
         $services = $this->getEvent()->getApplication()->getServiceManager();
+
+        // Installing the editor is an admin-only operation (downloads from the
+        // network and writes to dist/static). Enforce the same module-update
+        // ACL the API controller does, so authorization cannot drift.
+        $acl = $services->get('Omeka\Acl');
+        if (!$acl->userIsAllowed('Omeka\Entity\Module', 'update')) {
+            return $this->jsonError(403, 'Forbidden');
+        }
+
         $settings = $services->get('Omeka\Settings');
         $status = StaticEditorInstaller::getStoredInstallStatus($settings);
         if ($status['running']) {
