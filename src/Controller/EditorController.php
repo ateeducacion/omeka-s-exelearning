@@ -56,20 +56,20 @@ class EditorController extends AbstractActionController
         try {
             $media = $api->read('media', $mediaId)->getContent();
         } catch (\Exception $e) {
-            $this->messenger()->addError('Media not found.');
+            $this->messenger()->addError($this->translate('Media not found.')); // @translate
             return $this->redirect()->toRoute('admin');
         }
 
         $acl = $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Acl');
         if (!$acl->userIsAllowed('Omeka\Entity\Media', 'update')) {
-            $this->messenger()->addError('You do not have permission to edit media.');
+            $this->messenger()->addError($this->translate('You do not have permission to edit media.')); // @translate
             return $this->redirect()->toRoute('admin');
         }
 
         $filename = $media->filename();
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         if (!in_array($extension, ['elpx', 'zip'])) {
-            $this->messenger()->addError('This is not an eXeLearning file.');
+            $this->messenger()->addError($this->translate('This is not an eXeLearning file.')); // @translate
             return $this->redirect()->toRoute('admin');
         }
 
@@ -111,6 +111,10 @@ class EditorController extends AbstractActionController
                 'saved' => $this->translate('Saved successfully'),
                 'saveButton' => $this->translate('Save to Omeka'),
                 'loading' => $this->translate('Loading project...'),
+                'waiting' => $this->translate('Waiting for editor...'),
+                'downloading' => $this->translate('Downloading file...'),
+                'importing' => $this->translate('Importing content...'),
+                'errorLoading' => $this->translate('Error loading project'),
                 'error' => $this->translate('Error'),
                 'savingWait' => $this->translate('Please wait while the file is being saved.'),
                 'unsavedChanges' => $this->translate('You have unsaved changes. Are you sure you want to close?'),
@@ -254,6 +258,10 @@ class EditorController extends AbstractActionController
             'exportOnly' => true,
             'i18n' => [
                 'loading' => $this->translate('Loading project...'),
+                'waiting' => $this->translate('Waiting for editor...'),
+                'downloading' => $this->translate('Downloading file...'),
+                'importing' => $this->translate('Importing content...'),
+                'errorLoading' => $this->translate('Error loading project'),
                 'error' => $this->translate('Error'),
             ],
         ];

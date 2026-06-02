@@ -47,9 +47,14 @@ class ConfigForm extends Form
             ],
         ]);
 
+        // Use the bare format label as the option label so the form's
+        // multicheckbox view helper translates it against an existing catalog
+        // entry (e.g. "IMS Package" -> "Paquete IMS"). The previous
+        // sprintf('%s (%s)', label, suffix) produced a composite msgid that no
+        // catalog ever contained, so every option rendered untranslated.
         $valueOptions = [];
         foreach (DownloadFormats::all() as $fmt) {
-            $valueOptions[$fmt['id']] = sprintf('%s (%s)', $fmt['label'], $fmt['suffix']);
+            $valueOptions[$fmt['id']] = $fmt['label'];
         }
 
         $this->add([

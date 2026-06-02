@@ -175,14 +175,14 @@
             updateLoadScreen(config.i18n?.loading || 'Loading project...');
 
             // Wait for the Yjs bridge to be initialized
-            updateLoadScreen('Waiting for editor...');
+            updateLoadScreen(config.i18n?.waiting || 'Waiting for editor...');
             var bridge = await waitForBridge();
 
             // Fetch the ELP file
             // Use cache: 'no-cache' to force revalidation with the server.
             // Without this, the browser may serve a stale cached version after
             // the file is updated on the server (heuristic caching).
-            updateLoadScreen('Downloading file...');
+            updateLoadScreen(config.i18n?.downloading || 'Downloading file...');
             var response = await fetch(elpUrl, { cache: 'no-cache' });
             if (!response.ok) {
                 throw new Error('HTTP ' + response.status + ': ' + response.statusText);
@@ -195,7 +195,7 @@
             var file = new File([blob], filename, { type: 'application/zip' });
 
             // Import using the project API or bridge directly
-            updateLoadScreen('Importing content...');
+            updateLoadScreen(config.i18n?.importing || 'Importing content...');
             var project = window.eXeLearning?.app?.project;
             if (typeof project?.importElpxFile === 'function') {
                 console.log('[Omeka-EXE Bridge] Using project.importElpxFile...');
@@ -211,7 +211,7 @@
             console.log('[Omeka-EXE Bridge] ELP imported successfully');
         } catch (error) {
             console.error('[Omeka-EXE Bridge] Import failed:', error);
-            updateLoadScreen('Error loading project');
+            updateLoadScreen(config.i18n?.errorLoading || 'Error loading project');
         } finally {
             setTimeout(function() {
                 updateLoadScreen('', false);
