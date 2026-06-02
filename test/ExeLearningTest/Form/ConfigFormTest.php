@@ -37,9 +37,11 @@ class ConfigFormTest extends TestCase
         $this->assertTrue($this->form->has('exelearning_viewer_height'));
     }
 
-    public function testFormHasShowEditButtonElement(): void
+    public function testFormHasNoShowEditButtonElement(): void
     {
-        $this->assertTrue($this->form->has('exelearning_show_edit_button'));
+        // Editing .elpx is admin-only; the public "Show Edit Button" toggle was
+        // removed, so the form must not expose it.
+        $this->assertFalse($this->form->has('exelearning_show_edit_button'));
     }
 
     // =========================================================================
@@ -84,38 +86,12 @@ class ConfigFormTest extends TestCase
     }
 
     // =========================================================================
-    // Show edit button element tests
+    // Download formats element tests
     // =========================================================================
 
-    public function testShowEditButtonElementExists(): void
+    public function testFormHasDownloadFormatsElement(): void
     {
-        $element = $this->form->get('exelearning_show_edit_button');
-        $this->assertNotNull($element);
-    }
-
-    public function testShowEditButtonIsCheckboxElement(): void
-    {
-        $element = $this->form->get('exelearning_show_edit_button');
-        $this->assertInstanceOf(\Laminas\Form\Element\Checkbox::class, $element);
-    }
-
-    public function testShowEditButtonHasLabel(): void
-    {
-        $element = $this->form->get('exelearning_show_edit_button');
-        $this->assertNotEmpty($element->getLabel());
-        $this->assertStringContainsString('Edit', $element->getLabel());
-    }
-
-    public function testShowEditButtonHasDefaultCheckedValue(): void
-    {
-        $element = $this->form->get('exelearning_show_edit_button');
-        $this->assertEquals('1', $element->getCheckedValue());
-    }
-
-    public function testShowEditButtonHasUncheckedValue(): void
-    {
-        $element = $this->form->get('exelearning_show_edit_button');
-        $this->assertEquals('0', $element->getUncheckedValue());
+        $this->assertTrue($this->form->has('exelearning_download_formats'));
     }
 
     // =========================================================================
@@ -129,6 +105,6 @@ class ConfigFormTest extends TestCase
 
         // Should still have the elements
         $this->assertTrue($this->form->has('exelearning_viewer_height'));
-        $this->assertTrue($this->form->has('exelearning_show_edit_button'));
+        $this->assertTrue($this->form->has('exelearning_download_formats'));
     }
 }

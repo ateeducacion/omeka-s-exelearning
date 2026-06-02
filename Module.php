@@ -755,7 +755,6 @@ JS
 
         $form->setData([
             'exelearning_viewer_height' => $settings->get('exelearning_viewer_height', 600),
-            'exelearning_show_edit_button' => $settings->get('exelearning_show_edit_button', true) ? '1' : '0',
             'exelearning_download_formats' => DownloadFormats::sanitize($storedFormats),
         ]);
 
@@ -942,10 +941,6 @@ JS
         $settings->set(
             'exelearning_viewer_height',
             (int) ($config['exelearning_viewer_height'] ?? 600)
-        );
-        $settings->set(
-            'exelearning_show_edit_button',
-            isset($config['exelearning_show_edit_button']) && $config['exelearning_show_edit_button'] === '1'
         );
         $settings->set(
             'exelearning_download_formats',

@@ -32,21 +32,6 @@ class ConfigForm extends Form
             ],
         ]);
 
-        $this->add([
-            'name' => 'exelearning_show_edit_button',
-            'type' => Element\Checkbox::class,
-            'options' => [
-                'label' => 'Show Edit Button', // @translate
-                'info' => 'Display the "Edit in eXeLearning" button for users with edit permissions.', // @translate
-                'use_hidden_element' => true,
-                'checked_value' => '1',
-                'unchecked_value' => '0',
-            ],
-            'attributes' => [
-                'value' => '1',
-            ],
-        ]);
-
         // Use the bare format label as the option label so the form's
         // multicheckbox view helper translates it against an existing catalog
         // entry (e.g. "IMS Package" -> "Paquete IMS"). The previous
