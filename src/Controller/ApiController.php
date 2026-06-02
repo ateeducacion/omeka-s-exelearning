@@ -55,13 +55,17 @@ class ApiController extends AbstractActionController
      */
     protected function extractBasePath(string $uriPath): string
     {
+        // Strip from the marker that appears EARLIEST in the path, not the
+        // first one in this list — otherwise a path like
+        // `/sub/s/site/admin/...` would be cut at `/admin/` and keep too much.
+        $earliest = null;
         foreach (['/admin/', '/s/', '/api/'] as $marker) {
             $pos = strpos($uriPath, $marker);
-            if ($pos !== false) {
-                return substr($uriPath, 0, $pos);
+            if ($pos !== false && ($earliest === null || $pos < $earliest)) {
+                $earliest = $pos;
             }
         }
-        return '';
+        return $earliest === null ? '' : substr($uriPath, 0, $earliest);
     }
 
     /**

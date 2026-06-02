@@ -1340,6 +1340,14 @@ class ApiControllerTest extends TestCase
         $this->assertSame('', $basePath);
     }
 
+    public function testExtractBasePathPicksEarliestMarkerNotListOrder(): void
+    {
+        // /api/ (3rd in the list) appears before /admin/ (1st in the list);
+        // the earliest-by-position marker must win.
+        $basePath = $this->callProtectedMethod($this->controller, 'extractBasePath', ['/x/api/y/admin/z/']);
+        $this->assertSame('/x', $basePath);
+    }
+
     // =========================================================================
     // Mandatory CSRF tests (CsrfValidationTrait)
     // =========================================================================

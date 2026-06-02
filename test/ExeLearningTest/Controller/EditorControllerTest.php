@@ -656,6 +656,70 @@ class EditorControllerTest extends TestCase
         $this->assertSame('', $result);
     }
 
+    public function testExtractBasePathPicksEarliestMarker(): void
+    {
+        $result = $this->callProtectedMethod($this->controller, 'extractBasePath', ['/sub/s/site/admin/x']);
+        $this->assertSame('/sub', $result);
+    }
+
+    public function testResolveBasePathPrefersUriMarker(): void
+    {
+        $request = new class {
+            public function getUri()
+            {
+                return new class {
+                    public function getPath(): string
+                    {
+                        return '/sub/admin/media/3';
+                    }
+                };
+            }
+            public function getBasePath(): string
+            {
+                return '/should-not-be-used';
+            }
+        };
+        $this->assertSame('/sub', $this->callProtectedMethod($this->controller, 'resolveBasePath', [$request]));
+    }
+
+    public function testResolveBasePathFallsBackToGetBasePathForMarkerlessRoute(): void
+    {
+        // The /exelearning/export route has no marker; getBasePath() must be
+        // used so subdirectory installs still resolve the editor prefix.
+        $request = new class {
+            public function getUri()
+            {
+                return new class {
+                    public function getPath(): string
+                    {
+                        return '/exelearning/export';
+                    }
+                };
+            }
+            public function getBasePath(): string
+            {
+                return '/omeka-s';
+            }
+        };
+        $this->assertSame('/omeka-s', $this->callProtectedMethod($this->controller, 'resolveBasePath', [$request]));
+    }
+
+    public function testResolveBasePathEmptyWhenNoMarkerAndNoGetBasePath(): void
+    {
+        $request = new class {
+            public function getUri()
+            {
+                return new class {
+                    public function getPath(): string
+                    {
+                        return '/exelearning/export';
+                    }
+                };
+            }
+        };
+        $this->assertSame('', $this->callProtectedMethod($this->controller, 'resolveBasePath', [$request]));
+    }
+
     public function testBuildInstallStatusPayloadHandlesIdleNotInstalledState(): void
     {
         $settings = new class {

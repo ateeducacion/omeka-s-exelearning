@@ -90,7 +90,7 @@ class EditorController extends AbstractActionController
         if ($port && !(($uri->getScheme() === 'http' && $port == 80) || ($uri->getScheme() === 'https' && $port == 443))) {
             $serverUrl .= ':' . $port;
         }
-        $basePath = $this->extractBasePath($uri->getPath());
+        $basePath = $this->resolveBasePath($this->getRequest());
 
         $csrf = new \Laminas\Form\Element\Csrf('csrf');
         $csrfToken = $csrf->getValue();
@@ -154,13 +154,37 @@ class EditorController extends AbstractActionController
      */
     protected function extractBasePath(string $uriPath): string
     {
+        // Strip from the marker that appears EARLIEST in the path, not the
+        // first one in this list.
+        $earliest = null;
         foreach (['/admin/', '/s/', '/api/'] as $marker) {
             $pos = strpos($uriPath, $marker);
-            if ($pos !== false) {
-                return substr($uriPath, 0, $pos);
+            if ($pos !== false && ($earliest === null || $pos < $earliest)) {
+                $earliest = $pos;
             }
         }
-        return '';
+        return $earliest === null ? '' : substr($uriPath, 0, $earliest);
+    }
+
+    /**
+     * Resolve the Omeka base path for a request.
+     *
+     * Prefers the URI marker (reliable under php-wasm where getBasePath() is
+     * unreliable). For a route with no known marker — notably the public
+     * `/exelearning/export` bootstrap — falls back to the framework's mounted
+     * base path so the editor still loads from the right prefix on a
+     * subdirectory install.
+     *
+     * @param object $request
+     * @return string
+     */
+    protected function resolveBasePath($request): string
+    {
+        $fromUri = $this->extractBasePath($request->getUri()->getPath());
+        if ($fromUri !== '') {
+            return $fromUri;
+        }
+        return method_exists($request, 'getBasePath') ? (string) $request->getBasePath() : '';
     }
 
     /**
@@ -219,7 +243,7 @@ class EditorController extends AbstractActionController
         if ($port && !(($uri->getScheme() === 'http' && $port == 80) || ($uri->getScheme() === 'https' && $port == 443))) {
             $serverUrl .= ':' . $port;
         }
-        $basePath = $this->extractBasePath($uri->getPath());
+        $basePath = $this->resolveBasePath($this->getRequest());
 
         $config = [
             'mode' => 'OmekaSExport',
