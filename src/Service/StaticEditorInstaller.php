@@ -13,6 +13,9 @@ class StaticEditorInstaller
     /** GitHub Atom feed for latest releases. */
     const RELEASES_FEED_URL = 'https://github.com/exelearning/exelearning/releases.atom';
 
+    /** GitHub REST API endpoint for a release's metadata (tag appended). */
+    const RELEASES_API_URL = 'https://api.github.com/repos/exelearning/exelearning/releases/tags/v';
+
     /** Asset filename prefix. */
     const ASSET_PREFIX = 'exelearning-static-v';
 
@@ -169,6 +172,16 @@ class StaticEditorInstaller
         $tmpFile = $this->downloadAsset($assetUrl);
 
         try {
+            // Bind the download to GitHub's published release metadata, not just
+            // transport TLS. Older releases predate asset digests, so a missing
+            // digest falls back to TLS rather than blocking the install; a
+            // published digest that does not match aborts.
+            $expectedSha256 = $this->fetchReleaseAssetSha256($version, $this->getAssetFilename($version));
+            if ($expectedSha256 !== null) {
+                $this->reportStatus('validating', 'Verifying download integrity...', ['target_version' => $version]); // @translate
+                $this->verifyFileSha256($tmpFile, $expectedSha256);
+            }
+
             $this->reportStatus('extracting', 'Extracting editor package...', ['target_version' => $version]); // @translate
             $this->validateZip($tmpFile);
             $tmpDir = $this->extractZip($tmpFile);
@@ -249,12 +262,91 @@ class StaticEditorInstaller
     }
 
     /**
+     * Build the static editor ZIP asset filename for a version.
+     */
+    public function getAssetFilename(string $version): string
+    {
+        return self::ASSET_PREFIX . $version . '.zip';
+    }
+
+    /**
      * Build the download URL for the static editor asset.
+     *
+     * The version has already been validated to a strict semver-ish shape, so
+     * rawurlencode is belt-and-suspenders against any path-injection.
      */
     public function getAssetUrl(string $version): string
     {
-        $filename = self::ASSET_PREFIX . $version . '.zip';
-        return 'https://github.com/exelearning/exelearning/releases/download/v' . $version . '/' . $filename;
+        return 'https://github.com/exelearning/exelearning/releases/download/v'
+            . rawurlencode($version) . '/' . $this->getAssetFilename($version);
+    }
+
+    /**
+     * Fetch the GitHub-published SHA-256 digest for a release asset, or null if
+     * GitHub cannot be queried or the release does not publish a digest.
+     *
+     * @codeCoverageIgnore
+     */
+    public function fetchReleaseAssetSha256(string $version, string $assetName): ?string
+    {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'header' => implode("\r\n", [
+                    'Accept: application/vnd.github+json',
+                    'User-Agent: OmekaS-ExeLearning-Module',
+                    'X-GitHub-Api-Version: 2022-11-28',
+                ]),
+                'timeout' => 30,
+            ],
+        ]);
+
+        $json = @file_get_contents(self::RELEASES_API_URL . rawurlencode($version), false, $context);
+        if ($json === false) {
+            return null;
+        }
+
+        return $this->extractAssetSha256FromReleaseJson($json, $assetName);
+    }
+
+    /**
+     * Extract the lowercase SHA-256 hex digest for one asset from a GitHub
+     * Releases API JSON body, or null if absent/malformed.
+     */
+    public function extractAssetSha256FromReleaseJson(string $json, string $assetName): ?string
+    {
+        $data = json_decode($json, true);
+        if (!is_array($data) || empty($data['assets']) || !is_array($data['assets'])) {
+            return null;
+        }
+
+        foreach ($data['assets'] as $asset) {
+            if (!is_array($asset) || (string) ($asset['name'] ?? '') !== $assetName) {
+                continue;
+            }
+            $digest = strtolower((string) ($asset['digest'] ?? ''));
+            if (preg_match('/^sha256:([a-f0-9]{64})$/', $digest, $matches)) {
+                return $matches[1];
+            }
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Verify a downloaded file against an expected SHA-256 digest.
+     *
+     * @throws \RuntimeException on a read failure or digest mismatch.
+     */
+    public function verifyFileSha256(string $filePath, string $expectedSha256): void
+    {
+        $actual = hash_file('sha256', $filePath);
+        if ($actual === false || !hash_equals(strtolower($expectedSha256), strtolower($actual))) {
+            throw new \RuntimeException(
+                'The downloaded editor package failed integrity verification (SHA-256 mismatch).' // @translate
+            );
+        }
     }
 
     /**
@@ -335,7 +427,16 @@ class StaticEditorInstaller
             );
         }
 
-        $zip->extractTo($tmpDir);
+        // Extract entry-by-entry with zip-slip/zip-bomb guards instead of a
+        // blind extractTo() (defense-in-depth; the same hardening the .elpx
+        // path uses).
+        try {
+            ZipSafety::extract($zip, $tmpDir);
+        } catch (\RuntimeException $e) {
+            $zip->close();
+            $this->cleanupDirectory($tmpDir);
+            throw $e;
+        }
         $zip->close();
 
         return $tmpDir;
@@ -575,7 +676,9 @@ class StaticEditorInstaller
     {
         $version = trim(ltrim($candidate, 'v'));
 
-        if (!preg_match('/^\\d+\\.\\d+/', $version)) {
+        // Anchor both ends: a tag like "4.0.0 ../../x" or "4.0.0; rm" must be
+        // rejected, not just prefix-matched, before it reaches a download URL.
+        if (!preg_match('/^\\d+\\.\\d+(?:\\.\\d+)?(?:-[0-9A-Za-z.]+)?$/', $version)) {
             throw new \RuntimeException(
                 sprintf('Unexpected release tag format: %s', $candidate) // @translate
             );

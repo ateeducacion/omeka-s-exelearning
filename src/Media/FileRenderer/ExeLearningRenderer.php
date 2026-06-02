@@ -110,18 +110,9 @@ class ExeLearningRenderer implements RendererInterface
         $html .= $view->translate('Fullscreen');
         $html .= '</button>';
 
-        // Edit button (if allowed)
-        if ($config['showEditButton'] && $this->canEdit($view, $media)) {
-            $editUrl = $view->url('admin/exelearning-editor', [
-                'action' => 'edit',
-                'id' => $media->id()
-            ]);
-            $html .= '<a href="' . $view->escapeHtmlAttr($editUrl) . '" ';
-            $html .= 'class="button exelearning-edit-btn" target="_blank">';
-            $html .= '<span class="icon-edit"></span> ';
-            $html .= $view->translate('Edit in eXeLearning');
-            $html .= '</a>';
-        }
+        // No edit button here: editing .elpx is an admin-only action, offered
+        // by the admin media-show viewer. This renderer (which can appear on
+        // public pages) stays view + fullscreen only.
 
         $html .= '</div>'; // toolbar-actions
         $html .= '</div>'; // toolbar
@@ -178,23 +169,6 @@ class ExeLearningRenderer implements RendererInterface
         $html .= '</div>';
 
         return $html;
-    }
-
-    /**
-     * Check if the current user can edit the media.
-     *
-     * @param PhpRenderer $view
-     * @param MediaRepresentation $media
-     * @return bool
-     */
-    protected function canEdit(PhpRenderer $view, MediaRepresentation $media): bool
-    {
-        try {
-            $acl = $view->getHelperPluginManager()->get('acl');
-            return $acl->userIsAllowed($media->item(), 'update');
-        } catch (\Exception $e) {
-            return false;
-        }
     }
 
     /**
@@ -269,14 +243,12 @@ class ExeLearningRenderer implements RendererInterface
     {
         $defaults = [
             'height' => 600,
-            'showEditButton' => true,
         ];
 
         try {
             $setting = $view->getHelperPluginManager()->get('setting');
             return [
                 'height' => $setting('exelearning_viewer_height', $defaults['height']),
-                'showEditButton' => $setting('exelearning_show_edit_button', $defaults['showEditButton']),
             ];
         } catch (\Exception $e) {
             return $defaults;

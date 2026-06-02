@@ -189,6 +189,22 @@ class StaticEditorInstallerTest extends TestCase
         @unlink($tmp);
     }
 
+    public function testExtractZipRejectsUnsafeEntry(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'test-');
+        $zip = new \ZipArchive();
+        $zip->open($tmp, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('../evil.txt', 'pwn');
+        $zip->close();
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->installer->extractZip($tmp);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
     // =========================================================================
     // Constants tests
     // =========================================================================
@@ -384,6 +400,123 @@ XML;
         // Should not throw for non-existent dir
         $this->installer->cleanupDirectory('/tmp/nonexistent-' . bin2hex(random_bytes(8)));
         $this->assertTrue(true);
+    }
+
+    // =========================================================================
+    // Download integrity (SHA-256) tests
+    // =========================================================================
+
+    public function testGetAssetFilenameBuildsName(): void
+    {
+        $this->assertSame(
+            'exelearning-static-v4.0.0.zip',
+            $this->installer->getAssetFilename('4.0.0')
+        );
+    }
+
+    public function testExtractAssetSha256FindsMatchingAssetDigest(): void
+    {
+        $hash = str_repeat('a', 64);
+        $json = json_encode([
+            'assets' => [
+                ['name' => 'other.zip', 'digest' => 'sha256:' . str_repeat('b', 64)],
+                ['name' => 'exelearning-static-v4.0.0.zip', 'digest' => 'sha256:' . $hash],
+            ],
+        ]);
+
+        $this->assertSame(
+            $hash,
+            $this->installer->extractAssetSha256FromReleaseJson($json, 'exelearning-static-v4.0.0.zip')
+        );
+    }
+
+    public function testExtractAssetSha256ReturnsNullWhenAssetAbsent(): void
+    {
+        $json = json_encode(['assets' => [['name' => 'x.zip', 'digest' => 'sha256:' . str_repeat('a', 64)]]]);
+        $this->assertNull($this->installer->extractAssetSha256FromReleaseJson($json, 'missing.zip'));
+    }
+
+    public function testExtractAssetSha256ReturnsNullWhenDigestMissing(): void
+    {
+        $json = json_encode(['assets' => [['name' => 'a.zip']]]);
+        $this->assertNull($this->installer->extractAssetSha256FromReleaseJson($json, 'a.zip'));
+    }
+
+    public function testExtractAssetSha256ReturnsNullWhenDigestMalformed(): void
+    {
+        $json = json_encode(['assets' => [['name' => 'a.zip', 'digest' => 'md5:deadbeef']]]);
+        $this->assertNull($this->installer->extractAssetSha256FromReleaseJson($json, 'a.zip'));
+    }
+
+    public function testExtractAssetSha256ReturnsNullOnInvalidJson(): void
+    {
+        $this->assertNull($this->installer->extractAssetSha256FromReleaseJson('not json', 'a.zip'));
+        $this->assertNull($this->installer->extractAssetSha256FromReleaseJson(json_encode(['assets' => 'x']), 'a.zip'));
+    }
+
+    public function testVerifyFileSha256PassesForMatchingDigest(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'sha-');
+        file_put_contents($tmp, 'editor-bytes');
+        $expected = hash_file('sha256', $tmp);
+
+        // No exception means success.
+        $this->installer->verifyFileSha256($tmp, $expected);
+        $this->installer->verifyFileSha256($tmp, strtoupper($expected));
+        @unlink($tmp);
+        $this->assertTrue(true);
+    }
+
+    public function testVerifyFileSha256ThrowsOnMismatch(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'sha-');
+        file_put_contents($tmp, 'editor-bytes');
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessage('integrity verification');
+            $this->installer->verifyFileSha256($tmp, str_repeat('0', 64));
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    public function testGetAssetUrlIsStableForValidVersion(): void
+    {
+        // rawurlencode is a no-op for semver-ish versions, so the URL is unchanged.
+        $this->assertSame(
+            'https://github.com/exelearning/exelearning/releases/download/v4.0.0-rc1/exelearning-static-v4.0.0-rc1.zip',
+            $this->installer->getAssetUrl('4.0.0-rc1')
+        );
+    }
+
+    /**
+     * @dataProvider invalidVersionFeedProvider
+     */
+    public function testNormalizeVersionRejectsMalformedTags(string $tag): void
+    {
+        $feed = '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">'
+            . '<entry><title>' . $tag . '</title></entry></feed>';
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Unexpected release tag format');
+        $this->installer->extractVersionFromFeed($feed);
+    }
+
+    public function invalidVersionFeedProvider(): array
+    {
+        return [
+            'trailing path' => ['v4.0.0 ../../x'],
+            'shell metachars' => ['v4.0.0; rm -rf /'],
+            'query string' => ['v4.0.0?evil=1'],
+            'letters only' => ['draft'],
+        ];
+    }
+
+    public function testExtractVersionFromFeedAcceptsPlainSemver(): void
+    {
+        $feed = '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">'
+            . '<entry><title>v4.1</title></entry></feed>';
+        $this->assertSame('4.1', $this->installer->extractVersionFromFeed($feed));
     }
 
     // =========================================================================

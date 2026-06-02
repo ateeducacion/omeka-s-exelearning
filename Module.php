@@ -232,8 +232,10 @@ class Module extends AbstractModule
             $hash = $elpService->getMediaHash($media);
             $hasPreview = $elpService->hasPreview($media);
 
-            // Auto-process if not yet extracted
-            if (!$hash || !$hasPreview) {
+            // Auto-process once. Gate on the processed marker (not hasPreview)
+            // so a legitimately preview-less package is not re-extracted on
+            // every view, which would accumulate orphan extraction directories.
+            if (!$elpService->isProcessed($media)) {
                 $logger->info(sprintf('[ExeLearning] Auto-processing media %d on public view', $media->id()));
                 try {
                     $result = $elpService->processUploadedFile($media);
@@ -284,8 +286,8 @@ class Module extends AbstractModule
         $hash = $elpService->getMediaHash($media);
         $hasPreview = $elpService->hasPreview($media);
 
-        // Auto-process if not yet extracted
-        if (!$hash || !$hasPreview) {
+        // Auto-process once (gate on the processed marker, not hasPreview).
+        if (!$elpService->isProcessed($media)) {
             $logger->info(sprintf('[ExeLearning] Auto-processing media %d on view', $media->id()));
             try {
                 $result = $elpService->processUploadedFile($media);
@@ -753,7 +755,6 @@ JS
 
         $form->setData([
             'exelearning_viewer_height' => $settings->get('exelearning_viewer_height', 600),
-            'exelearning_show_edit_button' => $settings->get('exelearning_show_edit_button', true) ? '1' : '0',
             'exelearning_download_formats' => DownloadFormats::sanitize($storedFormats),
         ]);
 
@@ -940,10 +941,6 @@ JS
         $settings->set(
             'exelearning_viewer_height',
             (int) ($config['exelearning_viewer_height'] ?? 600)
-        );
-        $settings->set(
-            'exelearning_show_edit_button',
-            isset($config['exelearning_show_edit_button']) && $config['exelearning_show_edit_button'] === '1'
         );
         $settings->set(
             'exelearning_download_formats',

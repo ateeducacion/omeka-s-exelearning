@@ -23,7 +23,17 @@ class ApiControllerTest extends TestCase
     protected function setUp(): void
     {
         $this->elpService = $this->createMock(ElpFileService::class);
-        $this->controller = new ApiController($this->elpService);
+        // Action-flow tests exercise the controller without a real session, so
+        // they cannot mint a valid CSRF token. Stub the (now mandatory) CSRF
+        // check to "valid" by default; the dedicated tests below flip it and
+        // exercise the real trait logic against the actual ApiController.
+        $this->controller = new class ($this->elpService) extends ApiController {
+            public bool $csrfStub = true;
+            protected function validateCsrf($request): bool
+            {
+                return $this->csrfStub;
+            }
+        };
     }
 
     private function callProtectedMethod(object $object, string $method, array $args = [])
@@ -1328,5 +1338,245 @@ class ApiControllerTest extends TestCase
     {
         $basePath = $this->callProtectedMethod($this->controller, 'extractBasePath', ['/some/unknown/path']);
         $this->assertSame('', $basePath);
+    }
+
+    public function testExtractBasePathPicksEarliestMarkerNotListOrder(): void
+    {
+        // /api/ (3rd in the list) appears before /admin/ (1st in the list);
+        // the earliest-by-position marker must win.
+        $basePath = $this->callProtectedMethod($this->controller, 'extractBasePath', ['/x/api/y/admin/z/']);
+        $this->assertSame('/x', $basePath);
+    }
+
+    // =========================================================================
+    // Mandatory CSRF tests (CsrfValidationTrait)
+    // =========================================================================
+
+    /**
+     * Build a request stub exposing the token sources validateCsrf reads.
+     */
+    private function csrfRequest(?string $post, ?string $header, ?string $query): object
+    {
+        return new class ($post, $header, $query) {
+            private $post;
+            private $header;
+            private $query;
+            public function __construct($post, $header, $query)
+            {
+                $this->post = $post;
+                $this->header = $header;
+                $this->query = $query;
+            }
+            public function isPost(): bool
+            {
+                return true;
+            }
+            public function getPost($key = null, $default = null)
+            {
+                return $this->post ?? $default;
+            }
+            public function getQuery($key = null, $default = null)
+            {
+                return $this->query ?? $default;
+            }
+            public function getHeaders()
+            {
+                $header = $this->header;
+                return new class ($header) {
+                    private $header;
+                    public function __construct($header)
+                    {
+                        $this->header = $header;
+                    }
+                    public function get($name)
+                    {
+                        if ($this->header === null) {
+                            return null;
+                        }
+                        $value = $this->header;
+                        return new class ($value) {
+                            private $value;
+                            public function __construct($value)
+                            {
+                                $this->value = $value;
+                            }
+                            public function getFieldValue(): string
+                            {
+                                return $this->value;
+                            }
+                        };
+                    }
+                };
+            }
+        };
+    }
+
+    public function testValidateCsrfRejectsMissingToken(): void
+    {
+        $controller = new ApiController($this->elpService);
+        $result = $this->callProtectedMethod(
+            $controller,
+            'validateCsrf',
+            [$this->csrfRequest(null, null, null)]
+        );
+        $this->assertFalse($result);
+    }
+
+    public function testValidateCsrfRejectsEmptyToken(): void
+    {
+        $controller = new ApiController($this->elpService);
+        $result = $this->callProtectedMethod(
+            $controller,
+            'validateCsrf',
+            [$this->csrfRequest('', '', '')]
+        );
+        $this->assertFalse($result);
+    }
+
+    public function testValidateCsrfAcceptsValidPostToken(): void
+    {
+        $controller = $this->controllerWithCsrfOutcome(true);
+        $this->assertTrue($this->callProtectedMethod(
+            $controller,
+            'validateCsrf',
+            [$this->csrfRequest('tok', null, null)]
+        ));
+    }
+
+    public function testValidateCsrfRejectsInvalidPostToken(): void
+    {
+        $controller = $this->controllerWithCsrfOutcome(false);
+        $this->assertFalse($this->callProtectedMethod(
+            $controller,
+            'validateCsrf',
+            [$this->csrfRequest('tok', null, null)]
+        ));
+    }
+
+    public function testValidateCsrfReadsHeaderToken(): void
+    {
+        $controller = $this->controllerWithCsrfOutcome(true);
+        $this->assertTrue($this->callProtectedMethod(
+            $controller,
+            'validateCsrf',
+            [$this->csrfRequest(null, 'tok', null)]
+        ));
+    }
+
+    public function testValidateCsrfReadsQueryToken(): void
+    {
+        $controller = $this->controllerWithCsrfOutcome(true);
+        $this->assertTrue($this->callProtectedMethod(
+            $controller,
+            'validateCsrf',
+            [$this->csrfRequest(null, null, 'tok')]
+        ));
+    }
+
+    public function testSaveActionRejectsRequestWithoutCsrfToken(): void
+    {
+        // Real controller (real trait): a save POST that omits the token must
+        // be rejected with 403 — the bypass is closed.
+        $controller = new ApiController($this->elpService);
+        $controller->setRequest($this->csrfRequest(null, null, null));
+        $controller->setIdentity(new class {
+            public function getId(): int
+            {
+                return 1;
+            }
+            public function getName(): string
+            {
+                return 'User';
+            }
+        });
+        $controller->setRouteParams(['id' => '123']);
+
+        $result = $controller->saveAction();
+
+        $this->assertEquals(403, $controller->getResponse()->getStatusCode());
+        $this->assertStringContainsString('CSRF', $result->getVariables()['message']);
+    }
+
+    public function testSetTeacherModeActionRejectsRequestWithoutCsrfToken(): void
+    {
+        $controller = new ApiController($this->elpService);
+        $controller->setRequest($this->csrfRequest(null, null, null));
+        $controller->setIdentity(new class {
+            public function getId(): int
+            {
+                return 1;
+            }
+            public function getName(): string
+            {
+                return 'User';
+            }
+        });
+        $controller->setRouteParams(['id' => '123']);
+
+        $result = $controller->setTeacherModeAction();
+
+        $this->assertEquals(403, $controller->getResponse()->getStatusCode());
+        $this->assertStringContainsString('CSRF', $result->getVariables()['message']);
+    }
+
+    public function testSaveActionRejectsWhenStubbedCsrfInvalid(): void
+    {
+        $request = new class {
+            public function isPost(): bool
+            {
+                return true;
+            }
+            public function getPost($key = null)
+            {
+                return null;
+            }
+            public function getHeaders()
+            {
+                return new class {
+                    public function get($name)
+                    {
+                        return null;
+                    }
+                };
+            }
+        };
+        $this->controller->csrfStub = false;
+        $this->controller->setRequest($request);
+        $this->controller->setIdentity(new class {
+            public function getId(): int
+            {
+                return 1;
+            }
+            public function getName(): string
+            {
+                return 'User';
+            }
+        });
+        $this->controller->setRouteParams(['id' => '123']);
+
+        $result = $this->controller->saveAction();
+
+        $this->assertEquals(403, $this->controller->getResponse()->getStatusCode());
+        $this->assertStringContainsString('CSRF', $result->getVariables()['message']);
+    }
+
+    /**
+     * Real ApiController whose only stubbed seam is the session-bound token
+     * check, so validateCsrf's gathering/empty logic runs for real.
+     */
+    private function controllerWithCsrfOutcome(bool $outcome): ApiController
+    {
+        return new class ($this->elpService, $outcome) extends ApiController {
+            private bool $outcome;
+            public function __construct($elp, bool $outcome)
+            {
+                parent::__construct($elp);
+                $this->outcome = $outcome;
+            }
+            protected function csrfTokenIsValid(string $token): bool
+            {
+                return $this->outcome;
+            }
+        };
     }
 }

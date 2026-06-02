@@ -61,16 +61,50 @@ class StylesServeController extends AbstractActionController
             return $this->notFound();
         }
 
+        $mimeType = $this->guessMimeType($targetReal);
+
         /** @var Response $response */
         $response = $this->getResponse();
         $response->setStatusCode(200);
         $headers = $response->getHeaders();
-        $headers->addHeaderLine('Content-Type', $this->guessMimeType($targetReal));
+        $headers->addHeaderLine('Content-Type', $mimeType);
         $headers->addHeaderLine('Content-Length', (string) filesize($targetReal));
         $headers->addHeaderLine('Cache-Control', 'public, max-age=3600');
         $headers->addHeaderLine('X-Content-Type-Options', 'nosniff');
+        $headers->addHeaderLine('X-Frame-Options', 'SAMEORIGIN');
+
+        // Style packages may legitimately ship svg/html/xml/js. Those render as
+        // active documents on the Omeka origin, so an admin opening another
+        // admin's uploaded file could execute its script. Serve any script
+        // capable type with a sandboxed, script-free CSP and as an attachment.
+        if ($this->isActiveDocumentType($mimeType)) {
+            $headers->addHeaderLine('Content-Security-Policy', implode('; ', [
+                "default-src 'none'",
+                "style-src 'unsafe-inline'",
+                "img-src 'self' data:",
+                "script-src 'none'",
+                "frame-ancestors 'self'",
+                'sandbox',
+            ]));
+            $headers->addHeaderLine('Content-Disposition', 'attachment');
+        }
+
         $response->setContent(file_get_contents($targetReal));
         return $response;
+    }
+
+    /**
+     * Whether a MIME type can execute script when opened as a top-level
+     * document or framed (HTML, SVG, XML, JavaScript).
+     */
+    private function isActiveDocumentType(string $mimeType): bool
+    {
+        foreach (['html', 'svg', 'xml', 'javascript'] as $needle) {
+            if (strpos($mimeType, $needle) !== false) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function notFound(): Response

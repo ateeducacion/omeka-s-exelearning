@@ -91,7 +91,7 @@ if ($canEdit && $editorInstalled) {
 <div class="exelearning-admin-viewer">
     <h4><?= $this->translate('eXeLearning Preview') ?></h4>
     <div class="viewer-controls">
-        <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank" class="button" id="exe-open-tab-link">
+        <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank" rel="noopener noreferrer" class="button" id="exe-open-tab-link">
             <span class="o-icon-external" aria-hidden="true"></span>
             <?= $this->translate('Open in new tab') ?>
         </a>
@@ -113,6 +113,9 @@ if ($canEdit && $editorInstalled) {
         </a>
         <?php endif; ?>
     </div>
+    <?php // allow-same-origin is required for the php-wasm playground: its
+          // service worker only intercepts requests from a same-origin
+          // document, so an opaque (sandboxed) iframe would 404. ?>
     <iframe
         class="preview-iframe"
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"

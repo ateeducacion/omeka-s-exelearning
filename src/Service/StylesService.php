@@ -469,8 +469,15 @@ class StylesService
      */
     public static function parseConfigXml(string $source): array
     {
+        // Reject any DOCTYPE outright and parse WITHOUT LIBXML_NOENT, so an
+        // attacker style's config.xml can never declare or substitute an
+        // external entity (XXE / local-file disclosure) or expand a billion
+        // laughs. LIBXML_NONET additionally blocks network fetches.
+        if (preg_match('/<!DOCTYPE/i', $source)) {
+            throw new \RuntimeException('config.xml must not contain a DOCTYPE declaration.');
+        }
         $prev = libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($source, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOENT);
+        $xml = simplexml_load_string($source, 'SimpleXMLElement', LIBXML_NONET);
         libxml_clear_errors();
         libxml_use_internal_errors($prev);
         if ($xml === false) {

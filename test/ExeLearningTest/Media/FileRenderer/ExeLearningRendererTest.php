@@ -140,7 +140,7 @@ class ExeLearningRendererTest extends TestCase
 
         $this->assertIsArray($config);
         $this->assertEquals(600, $config['height']);
-        $this->assertTrue($config['showEditButton']);
+        $this->assertArrayNotHasKey('showEditButton', $config);
     }
 
     // =========================================================================
@@ -154,25 +154,6 @@ class ExeLearningRendererTest extends TestCase
         $property->setAccessible(true);
 
         $this->assertSame($this->elpService, $property->getValue($this->renderer));
-    }
-
-    // =========================================================================
-    // canEdit() tests
-    // =========================================================================
-
-    public function testCanEditReturnsFalseOnException(): void
-    {
-        // Use stub PhpRenderer which throws exception when accessing helpers
-        $view = new \Laminas\View\Renderer\PhpRenderer();
-
-        $media = new MediaRepresentation(
-            'http://example.com/file.elpx',
-            'Test File',
-            'content.elpx'
-        );
-
-        $result = $this->callProtectedMethod($this->renderer, 'canEdit', [$view, $media]);
-        $this->assertFalse($result);
     }
 
     // =========================================================================
@@ -477,82 +458,6 @@ class ExeLearningRendererTest extends TestCase
     }
 
     // =========================================================================
-    // canEdit() additional tests
-    // =========================================================================
-
-    public function testCanEditReturnsTrueWhenUserAllowed(): void
-    {
-        // Create mock acl that returns true
-        $mockAcl = new class {
-            public function userIsAllowed($resource, $privilege): bool {
-                return true;
-            }
-        };
-
-        // Create mock plugin manager that returns the acl
-        $mockPluginManager = new class($mockAcl) {
-            private $acl;
-            public function __construct($acl) { $this->acl = $acl; }
-            public function get($name) {
-                if ($name === 'acl') return $this->acl;
-                throw new \Exception("Unknown helper: $name");
-            }
-        };
-
-        // Create mock view
-        $view = new class($mockPluginManager) extends \Laminas\View\Renderer\PhpRenderer {
-            private $pm;
-            public function __construct($pm) { $this->pm = $pm; }
-            public function getHelperPluginManager() { return $this->pm; }
-        };
-
-        $media = new MediaRepresentation(
-            'http://example.com/file.elpx',
-            'Test File',
-            'content.elpx',
-            1
-        );
-
-        $result = $this->callProtectedMethod($this->renderer, 'canEdit', [$view, $media]);
-        $this->assertTrue($result);
-    }
-
-    public function testCanEditReturnsFalseWhenUserNotAllowed(): void
-    {
-        // Create mock acl that returns false
-        $mockAcl = new class {
-            public function userIsAllowed($resource, $privilege): bool {
-                return false;
-            }
-        };
-
-        $mockPluginManager = new class($mockAcl) {
-            private $acl;
-            public function __construct($acl) { $this->acl = $acl; }
-            public function get($name) {
-                if ($name === 'acl') return $this->acl;
-                throw new \Exception("Unknown helper: $name");
-            }
-        };
-
-        $view = new class($mockPluginManager) extends \Laminas\View\Renderer\PhpRenderer {
-            private $pm;
-            public function __construct($pm) { $this->pm = $pm; }
-            public function getHelperPluginManager() { return $this->pm; }
-        };
-
-        $media = new MediaRepresentation(
-            'http://example.com/file.elpx',
-            'Test File',
-            'content.elpx',
-            1
-        );
-
-        $result = $this->callProtectedMethod($this->renderer, 'canEdit', [$view, $media]);
-        $this->assertFalse($result);
-    }
-
-    // =========================================================================
     // getConfig() additional tests
     // =========================================================================
 
@@ -563,7 +468,6 @@ class ExeLearningRendererTest extends TestCase
             public function __invoke($key, $default = null) {
                 $settings = [
                     'exelearning_viewer_height' => 800,
-                    'exelearning_show_edit_button' => false,
                 ];
                 return $settings[$key] ?? $default;
             }
@@ -587,7 +491,7 @@ class ExeLearningRendererTest extends TestCase
         $config = $this->callProtectedMethod($this->renderer, 'getConfig', [$view]);
 
         $this->assertEquals(800, $config['height']);
-        $this->assertFalse($config['showEditButton']);
+        $this->assertArrayNotHasKey('showEditButton', $config);
     }
 
     // =========================================================================

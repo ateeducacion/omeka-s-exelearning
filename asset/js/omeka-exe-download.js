@@ -117,9 +117,11 @@
             }
             var requestId = 'exe-' + (nextRequestId++);
             pendingExports[requestId] = { resolve: resolve, reject: reject };
+            // The export iframe is same-origin; target it explicitly rather
+            // than '*' so the request can never reach a cross-origin document.
             iframeEl.contentWindow.postMessage(
                 { type: 'OMEKA_REQUEST_EXPORT', requestId: requestId, data: { format: format } },
-                '*'
+                window.location.origin
             );
             setTimeout(function() {
                 if (pendingExports[requestId]) {
@@ -139,6 +141,15 @@
         link.click();
         document.body.removeChild(link);
         setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    function linkDownload(url, filename) {
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 
     function setBusy(container, busy) {
@@ -204,12 +215,39 @@
 
         if (format === 'elpx') {
             event.preventDefault();
-            var link = document.createElement('a');
-            link.href = elpUrl;
-            link.download = slug + suffix;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            if (!elpUrl) {
+                return;
+            }
+            var elpxName = slug + suffix;
+            // The .elpx is the uploaded media itself — no editor/export needed.
+            // Prefer fetch + blob over a plain `<a download>`: in the php-wasm
+            // playground, uploads are served by a service worker that a
+            // top-level download navigation bypasses (hitting the static host →
+            // 404 "file not available"). A page fetch goes through that worker,
+            // so the blob download works everywhere; fall back to a direct link
+            // if fetch is unavailable or fails.
+            if (typeof window.fetch !== 'function') {
+                linkDownload(elpUrl, elpxName);
+                return;
+            }
+            setBusy(container, true);
+            window.fetch(elpUrl, { credentials: 'same-origin' })
+                .then(function(resp) {
+                    if (!resp.ok) {
+                        throw new Error('HTTP ' + resp.status);
+                    }
+                    return resp.blob();
+                })
+                .then(function(blob) {
+                    triggerDownload(blob, elpxName);
+                })
+                .catch(function() {
+                    // Last resort: let the browser try the direct media URL.
+                    linkDownload(elpUrl, elpxName);
+                })
+                .finally(function() {
+                    setBusy(container, false);
+                });
             return;
         }
 

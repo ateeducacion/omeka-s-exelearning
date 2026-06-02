@@ -14,6 +14,8 @@ use Laminas\View\Model\ViewModel;
  */
 class EditorController extends AbstractActionController
 {
+    use CsrfValidationTrait;
+
     /** @var ElpFileService */
     protected $elpService;
 
@@ -54,20 +56,20 @@ class EditorController extends AbstractActionController
         try {
             $media = $api->read('media', $mediaId)->getContent();
         } catch (\Exception $e) {
-            $this->messenger()->addError('Media not found.');
+            $this->messenger()->addError($this->translate('Media not found.')); // @translate
             return $this->redirect()->toRoute('admin');
         }
 
         $acl = $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Acl');
         if (!$acl->userIsAllowed('Omeka\Entity\Media', 'update')) {
-            $this->messenger()->addError('You do not have permission to edit media.');
+            $this->messenger()->addError($this->translate('You do not have permission to edit media.')); // @translate
             return $this->redirect()->toRoute('admin');
         }
 
         $filename = $media->filename();
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         if (!in_array($extension, ['elpx', 'zip'])) {
-            $this->messenger()->addError('This is not an eXeLearning file.');
+            $this->messenger()->addError($this->translate('This is not an eXeLearning file.')); // @translate
             return $this->redirect()->toRoute('admin');
         }
 
@@ -88,7 +90,7 @@ class EditorController extends AbstractActionController
         if ($port && !(($uri->getScheme() === 'http' && $port == 80) || ($uri->getScheme() === 'https' && $port == 443))) {
             $serverUrl .= ':' . $port;
         }
-        $basePath = $this->extractBasePath($uri->getPath());
+        $basePath = $this->resolveBasePath($this->getRequest());
 
         $csrf = new \Laminas\Form\Element\Csrf('csrf');
         $csrfToken = $csrf->getValue();
@@ -109,6 +111,10 @@ class EditorController extends AbstractActionController
                 'saved' => $this->translate('Saved successfully'),
                 'saveButton' => $this->translate('Save to Omeka'),
                 'loading' => $this->translate('Loading project...'),
+                'waiting' => $this->translate('Waiting for editor...'),
+                'downloading' => $this->translate('Downloading file...'),
+                'importing' => $this->translate('Importing content...'),
+                'errorLoading' => $this->translate('Error loading project'),
                 'error' => $this->translate('Error'),
                 'savingWait' => $this->translate('Please wait while the file is being saved.'),
                 'unsavedChanges' => $this->translate('You have unsaved changes. Are you sure you want to close?'),
@@ -152,13 +158,37 @@ class EditorController extends AbstractActionController
      */
     protected function extractBasePath(string $uriPath): string
     {
+        // Strip from the marker that appears EARLIEST in the path, not the
+        // first one in this list.
+        $earliest = null;
         foreach (['/admin/', '/s/', '/api/'] as $marker) {
             $pos = strpos($uriPath, $marker);
-            if ($pos !== false) {
-                return substr($uriPath, 0, $pos);
+            if ($pos !== false && ($earliest === null || $pos < $earliest)) {
+                $earliest = $pos;
             }
         }
-        return '';
+        return $earliest === null ? '' : substr($uriPath, 0, $earliest);
+    }
+
+    /**
+     * Resolve the Omeka base path for a request.
+     *
+     * Prefers the URI marker (reliable under php-wasm where getBasePath() is
+     * unreliable). For a route with no known marker — notably the public
+     * `/exelearning/export` bootstrap — falls back to the framework's mounted
+     * base path so the editor still loads from the right prefix on a
+     * subdirectory install.
+     *
+     * @param object $request
+     * @return string
+     */
+    protected function resolveBasePath($request): string
+    {
+        $fromUri = $this->extractBasePath($request->getUri()->getPath());
+        if ($fromUri !== '') {
+            return $fromUri;
+        }
+        return method_exists($request, 'getBasePath') ? (string) $request->getBasePath() : '';
     }
 
     /**
@@ -217,7 +247,7 @@ class EditorController extends AbstractActionController
         if ($port && !(($uri->getScheme() === 'http' && $port == 80) || ($uri->getScheme() === 'https' && $port == 443))) {
             $serverUrl .= ':' . $port;
         }
-        $basePath = $this->extractBasePath($uri->getPath());
+        $basePath = $this->resolveBasePath($this->getRequest());
 
         $config = [
             'mode' => 'OmekaSExport',
@@ -228,6 +258,10 @@ class EditorController extends AbstractActionController
             'exportOnly' => true,
             'i18n' => [
                 'loading' => $this->translate('Loading project...'),
+                'waiting' => $this->translate('Waiting for editor...'),
+                'downloading' => $this->translate('Downloading file...'),
+                'importing' => $this->translate('Importing content...'),
+                'errorLoading' => $this->translate('Error loading project'),
                 'error' => $this->translate('Error'),
             ],
         ];
@@ -277,24 +311,21 @@ class EditorController extends AbstractActionController
             return $this->jsonError(401, 'Unauthorized');
         }
 
-        $csrfToken = $request->getPost('csrf');
-        if (!$csrfToken && method_exists($request, 'getQuery')) {
-            $csrfToken = $request->getQuery('csrf');
-        }
-        if (!$csrfToken) {
-            $header = $request->getHeaders()->get('X-CSRF-Token');
-            if ($header && $header !== false) {
-                $csrfToken = $header->getFieldValue();
-            }
-        }
-        if ($csrfToken) {
-            $csrf = new \Laminas\Validator\Csrf(['name' => 'csrf']);
-            if (!$csrf->isValid($csrfToken)) {
-                return $this->jsonError(403, 'CSRF: Invalid or missing CSRF token');
-            }
+        // CSRF is mandatory: a request that omits the token is rejected.
+        if (!$this->validateCsrf($request)) {
+            return $this->jsonError(403, 'CSRF: Invalid or missing CSRF token');
         }
 
         $services = $this->getEvent()->getApplication()->getServiceManager();
+
+        // Installing the editor is an admin-only operation (downloads from the
+        // network and writes to dist/static). Enforce the same module-update
+        // ACL the API controller does, so authorization cannot drift.
+        $acl = $services->get('Omeka\Acl');
+        if (!$acl->userIsAllowed('Omeka\Entity\Module', 'update')) {
+            return $this->jsonError(403, 'Forbidden');
+        }
+
         $settings = $services->get('Omeka\Settings');
         $status = StaticEditorInstaller::getStoredInstallStatus($settings);
         if ($status['running']) {

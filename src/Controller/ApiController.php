@@ -13,6 +13,8 @@ use ExeLearning\Service\StaticEditorInstaller;
  */
 class ApiController extends AbstractActionController
 {
+    use CsrfValidationTrait;
+
     /** @var ElpFileService */
     protected $elpService;
 
@@ -53,13 +55,17 @@ class ApiController extends AbstractActionController
      */
     protected function extractBasePath(string $uriPath): string
     {
+        // Strip from the marker that appears EARLIEST in the path, not the
+        // first one in this list — otherwise a path like
+        // `/sub/s/site/admin/...` would be cut at `/admin/` and keep too much.
+        $earliest = null;
         foreach (['/admin/', '/s/', '/api/'] as $marker) {
             $pos = strpos($uriPath, $marker);
-            if ($pos !== false) {
-                return substr($uriPath, 0, $pos);
+            if ($pos !== false && ($earliest === null || $pos < $earliest)) {
+                $earliest = $pos;
             }
         }
-        return '';
+        return $earliest === null ? '' : substr($uriPath, 0, $earliest);
     }
 
     /**
@@ -97,7 +103,15 @@ class ApiController extends AbstractActionController
         try {
             return $this->doSave();
         } catch (\Throwable $e) {
-            return $this->errorResponse(500, $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            // Log the detail server-side; never leak file paths / line numbers
+            // back to the client.
+            error_log(sprintf(
+                '[ExeLearning] save error: %s in %s:%d',
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
+            return $this->errorResponse(500, 'An unexpected error occurred while saving.');
         }
     }
 
@@ -113,16 +127,8 @@ class ApiController extends AbstractActionController
             return $this->errorResponse(401, 'Unauthorized');
         }
 
-        $csrfToken = $request->getPost('csrf');
-        if (!$csrfToken) {
-            $csrfHeader = $request->getHeaders()->get('X-CSRF-Token');
-            $csrfToken = $csrfHeader ? $csrfHeader->getFieldValue() : null;
-        }
-        if ($csrfToken) {
-            $csrf = new \Laminas\Validator\Csrf(['name' => 'csrf']);
-            if (!$csrf->isValid($csrfToken)) {
-                return $this->errorResponse(403, 'CSRF: Invalid or missing CSRF token');
-            }
+        if (!$this->validateCsrf($request)) {
+            return $this->errorResponse(403, 'CSRF: Invalid or missing CSRF token');
         }
 
         $mediaId = $this->params('id');
@@ -254,6 +260,10 @@ class ApiController extends AbstractActionController
             return $this->errorResponse(401, 'Unauthorized');
         }
 
+        if (!$this->validateCsrf($request)) {
+            return $this->errorResponse(403, 'CSRF: Invalid or missing CSRF token');
+        }
+
         $mediaId = $this->params('id');
         if (!$mediaId) {
             return $this->errorResponse(400, 'Media ID required');
@@ -301,22 +311,10 @@ class ApiController extends AbstractActionController
             return $this->errorResponse(401, 'Unauthorized');
         }
 
-        // Validate CSRF token (POST body, query string, or header)
-        $csrfToken = $request->getPost('csrf');
-        if (!$csrfToken && method_exists($request, 'getQuery')) {
-            $csrfToken = $request->getQuery('csrf');
-        }
-        if (!$csrfToken) {
-            $header = $request->getHeaders()->get('X-CSRF-Token');
-            if ($header) {
-                $csrfToken = $header->getFieldValue();
-            }
-        }
-        if ($csrfToken) {
-            $csrf = new \Laminas\Validator\Csrf(['name' => 'csrf']);
-            if (!$csrf->isValid($csrfToken)) {
-                return $this->errorResponse(403, 'CSRF: Invalid or missing CSRF token');
-            }
+        // Validate CSRF token (POST body, query string, or header). Mandatory:
+        // a request that omits the token is rejected.
+        if (!$this->validateCsrf($request)) {
+            return $this->errorResponse(403, 'CSRF: Invalid or missing CSRF token');
         }
 
         // Check admin permissions

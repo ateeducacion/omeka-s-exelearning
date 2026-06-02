@@ -607,4 +607,72 @@ class ContentControllerTest extends TestCase
 
         $this->assertEquals(404, $response->getStatusCode());
     }
+
+    // =========================================================================
+    // Active-document (SVG/XML) CSP hardening tests
+    // =========================================================================
+
+    public function testIsActiveDocumentTypeDetectsSvgAndXml(): void
+    {
+        $this->assertTrue($this->callProtectedMethod($this->controller, 'isActiveDocumentType', ['image/svg+xml']));
+        $this->assertTrue($this->callProtectedMethod($this->controller, 'isActiveDocumentType', ['application/xml']));
+        $this->assertFalse($this->callProtectedMethod($this->controller, 'isActiveDocumentType', ['image/png']));
+        $this->assertFalse($this->callProtectedMethod($this->controller, 'isActiveDocumentType', ['text/css']));
+    }
+
+    public function testAddSecurityHeadersForSvgUsesSandboxedCsp(): void
+    {
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'image/svg+xml']);
+
+        $csp = $headers->get('Content-Security-Policy');
+        $this->assertNotNull($csp, 'SVG must receive a CSP');
+        $value = $csp->getFieldValue();
+        $this->assertStringContainsString("default-src 'none'", $value);
+        $this->assertStringContainsString("script-src 'none'", $value);
+        $this->assertStringContainsString('sandbox', $value);
+    }
+
+    public function testAddSecurityHeadersForXmlUsesSandboxedCsp(): void
+    {
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'application/xml']);
+
+        $csp = $headers->get('Content-Security-Policy');
+        $this->assertNotNull($csp);
+        $this->assertStringContainsString("script-src 'none'", $csp->getFieldValue());
+    }
+
+    public function testServeActionServesSvgWithSandboxedCsp(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $hashDir = $this->testBasePath . '/' . $hash;
+        mkdir($hashDir, 0755, true);
+        file_put_contents($hashDir . '/evil.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+
+        $this->controller->setRouteParams(['hash' => $hash, 'file' => 'evil.svg']);
+
+        $response = $this->controller->serveAction();
+
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertStringContainsString('image/svg+xml', $response->getHeaders()->get('Content-Type')->getFieldValue());
+        $csp = $response->getHeaders()->get('Content-Security-Policy');
+        $this->assertNotNull($csp, 'SVG served same-origin must carry a script-free CSP');
+        $this->assertStringContainsString("script-src 'none'", $csp->getFieldValue());
+        $this->assertStringContainsString('sandbox', $csp->getFieldValue());
+    }
+
+    public function testServeActionImageStillHasNoCsp(): void
+    {
+        $hash = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
+        $hashDir = $this->testBasePath . '/' . $hash;
+        mkdir($hashDir, 0755, true);
+        file_put_contents($hashDir . '/p.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='));
+
+        $this->controller->setRouteParams(['hash' => $hash, 'file' => 'p.png']);
+        $response = $this->controller->serveAction();
+
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertNull($response->getHeaders()->get('Content-Security-Policy'));
+    }
 }

@@ -201,6 +201,49 @@ class ElpFileServiceTest extends TestCase
     }
 
     // =========================================================================
+    // isProcessed() tests
+    // =========================================================================
+
+    public function testIsProcessedReturnsTrueWhenMarked(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_processed' => '1']
+        );
+
+        $this->assertTrue($this->service->isProcessed($media));
+    }
+
+    public function testIsProcessedReturnsFalseWhenNotMarked(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            ['exelearning_has_preview' => '1']
+        );
+
+        $this->assertFalse($this->service->isProcessed($media));
+    }
+
+    public function testIsProcessedReturnsFalseWhenAbsent(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test File',
+            'file.elpx',
+            1,
+            []
+        );
+
+        $this->assertFalse($this->service->isProcessed($media));
+    }
+
+    // =========================================================================
     // getPreviewUrl() tests
     // =========================================================================
 
@@ -380,7 +423,7 @@ class ElpFileServiceTest extends TestCase
         $method->setAccessible(true);
 
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Failed to open ZIP file');
+        $this->expectExceptionMessage('Failed to extract ZIP file');
         $method->invokeArgs($this->service, [$invalidPath, $this->testDir . '/out']);
     }
 

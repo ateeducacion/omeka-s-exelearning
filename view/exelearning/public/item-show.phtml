@@ -76,7 +76,7 @@ if ($exeShowDownload) {
     <div class="viewer-header">
         <h3 class="viewer-title"><?= $this->escapeHtml($media->displayTitle()) ?></h3>
         <div class="viewer-actions">
-            <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank">
+            <a data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>" target="_blank" rel="noopener noreferrer">
                 <?= $this->translate('Open fullscreen') ?>
             </a>
             <?php if ($exeShowDownload): ?>
@@ -84,6 +84,10 @@ if ($exeShowDownload) {
             <?php endif; ?>
         </div>
     </div>
+    <?php // allow-same-origin is required: the content is proxied same-origin and,
+          // under the php-wasm playground, the service worker only intercepts
+          // requests from a same-origin document. An opaque (sandboxed) iframe
+          // would bypass it and 404 against the static host. ?>
     <iframe
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
         sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
