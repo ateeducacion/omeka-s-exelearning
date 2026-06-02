@@ -189,6 +189,22 @@ class StaticEditorInstallerTest extends TestCase
         @unlink($tmp);
     }
 
+    public function testExtractZipRejectsUnsafeEntry(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'test-');
+        $zip = new \ZipArchive();
+        $zip->open($tmp, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('../evil.txt', 'pwn');
+        $zip->close();
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->installer->extractZip($tmp);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
     // =========================================================================
     // Constants tests
     // =========================================================================

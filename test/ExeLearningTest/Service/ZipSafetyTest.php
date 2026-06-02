@@ -198,4 +198,27 @@ class ZipSafetyTest extends TestCase
         $this->assertDirectoryExists($dest . '/a/b/c');
         $this->assertSame('deep', file_get_contents($dest . '/a/b/c/deep.txt'));
     }
+
+    public function testExtractThrowsWhenDirectoryEntryCollidesWithExistingFile(): void
+    {
+        $dest = $this->tmpRoot . '/out';
+        mkdir($dest, 0755, true);
+        // 'a' already exists as a regular file, so creating dir 'a' must fail.
+        file_put_contents($dest . '/a', 'i-am-a-file');
+        $zip = $this->makeZip(['a/b.txt' => 'x']);
+
+        $this->expectException(\RuntimeException::class);
+        ZipSafety::extractFile($zip, $dest);
+    }
+
+    public function testExtractThrowsWhenTargetPathIsExistingDirectory(): void
+    {
+        $dest = $this->tmpRoot . '/out';
+        // 'x' already exists as a directory, so opening it as a file must fail.
+        mkdir($dest . '/x', 0755, true);
+        $zip = $this->makeZip(['x' => 'file-content']);
+
+        $this->expectException(\RuntimeException::class);
+        ZipSafety::extractFile($zip, $dest);
+    }
 }
