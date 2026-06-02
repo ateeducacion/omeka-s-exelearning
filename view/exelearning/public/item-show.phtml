@@ -84,9 +84,13 @@ if ($exeShowDownload) {
             <?php endif; ?>
         </div>
     </div>
+    <?php // allow-same-origin is required: the content is proxied same-origin and,
+          // under the php-wasm playground, the service worker only intercepts
+          // requests from a same-origin document. An opaque (sandboxed) iframe
+          // would bypass it and 404 against the static host. ?>
     <iframe
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
-        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>

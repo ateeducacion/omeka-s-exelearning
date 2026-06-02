@@ -113,10 +113,13 @@ if ($canEdit && $editorInstalled) {
         </a>
         <?php endif; ?>
     </div>
+    <?php // allow-same-origin is required for the php-wasm playground: its
+          // service worker only intercepts requests from a same-origin
+          // document, so an opaque (sandboxed) iframe would 404. ?>
     <iframe
         class="preview-iframe"
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
-        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>
