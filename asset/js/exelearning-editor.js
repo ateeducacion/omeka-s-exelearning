@@ -341,13 +341,23 @@
          * @param {object} data The message data.
          */
         onSaveComplete: function(data) {
-            // Update the admin preview iframe with the new content URL.
+            // Saving creates a NEW extraction hash and deletes the old one, so
+            // every element still pointing at the old hash (the preview iframe
+            // AND the "open in new tab"/"fullscreen" link) must be repointed —
+            // otherwise the stale links 404 against the now-deleted extraction.
             // Use window.exelearningContentBase (set by the page's inline script)
-            // to prepend the correct base including the playground SW scope prefix.
-            var previewIframe = document.querySelector('.preview-iframe');
-            if (data.contentPath && previewIframe) {
+            // so the playground SW scope prefix is preserved.
+            if (data.contentPath) {
                 var base = window.exelearningContentBase || window.location.origin;
-                previewIframe.src = base + data.contentPath;
+                var url = base + data.contentPath;
+                document.querySelectorAll('[data-exe-content-path]').forEach(function(el) {
+                    el.setAttribute('data-exe-content-path', data.contentPath);
+                    if (el.tagName === 'IFRAME') {
+                        el.src = url;
+                    } else {
+                        el.href = url;
+                    }
+                });
             }
             // Always close the modal after a successful save — avoid
             // window.location.reload() which 404s in PHP-WASM playground.
