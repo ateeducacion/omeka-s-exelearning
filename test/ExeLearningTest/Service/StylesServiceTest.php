@@ -344,6 +344,38 @@ class StylesServiceTest extends TestCase
         StylesService::parseConfigXml('<?xml version="1.0"?><theme></theme>');
     }
 
+    public function testParseConfigXmlRejectsDoctype(): void
+    {
+        // An XXE payload: a DOCTYPE declaring a SYSTEM entity that reads a file.
+        $payload = '<?xml version="1.0"?>'
+            . '<!DOCTYPE theme [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+            . '<theme><name>evil</name><title>&xxe;</title></theme>';
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('DOCTYPE');
+        StylesService::parseConfigXml($payload);
+    }
+
+    public function testParseConfigXmlRejectsDoctypeCaseInsensitive(): void
+    {
+        $payload = '<?xml version="1.0"?><!doctype theme><theme><name>x</name></theme>';
+        $this->expectException(\RuntimeException::class);
+        StylesService::parseConfigXml($payload);
+    }
+
+    public function testParseConfigXmlDoesNotSubstituteEntities(): void
+    {
+        // Without a DOCTYPE there is no XXE vector; ensure a normal document
+        // still parses and the declared fields come through verbatim.
+        $config = StylesService::parseConfigXml(
+            '<?xml version="1.0"?><theme><name>Clean Theme</name>'
+            . '<title>Title</title><version>2.0</version></theme>'
+        );
+        $this->assertSame('clean-theme', $config['name']);
+        $this->assertSame('Title', $config['title']);
+        $this->assertSame('2.0', $config['version']);
+    }
+
     public function testValidateZipRejectsOversize(): void
     {
         // Make a zip with large-content to exceed the cap via a reflective
