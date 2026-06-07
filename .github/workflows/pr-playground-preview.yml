@@ -64,7 +64,7 @@ jobs:
               `<small><a href="${playgroundUrl}">Try this PR in your browser</a></small>`,
               '',
               '',
-              '> ⚠️ The embedded eXeLearning editor is not included in this preview. You can install it from **Modules > ExeLearning > Configure** using the "Download & Install Editor" button. All other module features (ELPX upload, viewer, preview) work normally.',
+              '> ℹ️ The eXeLearning editor is fetched from the shared release and unpacked into the module when the playground boots, so the first load may take a few extra seconds. ELPX upload, viewer and preview work normally.',
             ].join('\n');
 
             // Search for an existing comment with the marker

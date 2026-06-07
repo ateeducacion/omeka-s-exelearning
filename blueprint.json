@@ -24,7 +24,13 @@
       "source": {
         "type": "url",
         "url": "https://github.com/exelearning/omeka-s-exelearning/archive/refs/heads/main.zip"
-      }
+      },
+      "assets": [
+        {
+          "url": "https://github.com/exelearning/exelearning/releases/download/v4.0.0/exelearning-static-v4.0.0.zip",
+          "destination": "dist/static"
+        }
+      ]
     }
   ],
   "itemSets": [
