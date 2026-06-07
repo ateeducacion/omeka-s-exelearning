@@ -10,10 +10,11 @@
 
 Omeka S module for eXeLearning content management. Upload, view and edit eXeLearning `.elpx` files directly within Omeka S.
 
-<a href="https://ateeducacion.github.io/omeka-s-playground/?blueprint=https%3A%2F%2Fraw.githubusercontent.com%2Fexelearning%2Fomeka-s-exelearning%2Frefs%2Fheads%2Fmain%2Fblueprint.json">
-  <img src="https://raw.githubusercontent.com/ateeducacion/omeka-s-playground/main/ogimage.png" alt="Try eXeLearning in your browser" width="220">
-</a><br>
-<small><a href="https://ateeducacion.github.io/omeka-s-playground/?blueprint=https%3A%2F%2Fraw.githubusercontent.com%2Fexelearning%2Fomeka-s-exelearning%2Frefs%2Fheads%2Fmain%2Fblueprint.json">Try in your browser</a></small>
+<a href="https://ateeducacion.github.io/omeka-s-playground/?blueprint=https%3A%2F%2Fraw.githubusercontent.com%2Fexelearning%2Fomeka-s-exelearning%2Frefs%2Fheads%2Fmain%2Fblueprint.json" target="_blank" rel="noopener noreferrer">
+  <img src="https://raw.githubusercontent.com/ateeducacion/omeka-s-playground/main/assets/playground-preview-button.svg" alt="Try eXeLearning on Omeka S Playground" width="224">
+</a>
+
+> ℹ️ The eXeLearning editor is fetched from the shared release and unpacked into the module when the playground boots, so the first load may take a few extra seconds. ELPX upload, viewer and preview work normally.
 
 ## Features
 
