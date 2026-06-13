@@ -373,8 +373,10 @@ class ExeLearningRendererTest extends TestCase
 
         $result = $renderer->render($view, $media);
 
-        // Check that security sandbox attributes are present
-        $this->assertStringContainsString('sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"', $result);
+        // Secure default: opaque-origin tokens, with no same-origin and no popup escape.
+        $this->assertStringContainsString('sandbox="allow-scripts allow-popups"', $result);
+        $this->assertStringNotContainsString('allow-same-origin', $result);
+        $this->assertStringNotContainsString('allow-popups-to-escape-sandbox', $result);
         $this->assertStringContainsString('referrerpolicy="no-referrer"', $result);
     }
 

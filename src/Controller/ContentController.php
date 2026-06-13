@@ -19,6 +19,9 @@ class ContentController extends AbstractActionController
     /** @var string */
     protected $basePath;
 
+    /** @var string Iframe-security mode (secure|legacy); drives the response sandbox CSP. */
+    protected $iframeMode = \ExeLearning\Service\IframeSandbox::MODE_SECURE;
+
     /** @var array MIME types for common file extensions */
     protected $mimeTypes = [
         'html' => 'text/html',
@@ -49,11 +52,13 @@ class ContentController extends AbstractActionController
     ];
 
     /**
-     * @param string $basePath Path to the exelearning files directory
+     * @param string $basePath   Path to the exelearning files directory
+     * @param string $iframeMode Iframe-security mode (secure|legacy)
      */
-    public function __construct(string $basePath)
+    public function __construct(string $basePath, string $iframeMode = \ExeLearning\Service\IframeSandbox::MODE_SECURE)
     {
         $this->basePath = $basePath;
+        $this->iframeMode = \ExeLearning\Service\IframeSandbox::normalizeMode($iframeMode);
     }
 
     /**
@@ -159,7 +164,7 @@ class ContentController extends AbstractActionController
             // - Restricts where content can be loaded from
             // - Prevents the content from framing other sites
             // - Allows images/media from same origin and data URIs
-            $csp = implode('; ', [
+            $directives = [
                 "default-src 'self'",
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
                 "style-src 'self' 'unsafe-inline'",
@@ -171,8 +176,16 @@ class ContentController extends AbstractActionController
                 "frame-ancestors 'self'",
                 "form-action 'none'",
                 "base-uri 'self'",
-            ]);
-            $headers->addHeaderLine('Content-Security-Policy', $csp);
+            ];
+            // In secure mode, sandbox the document at the response level so it keeps an
+            // opaque origin even when loaded OUTSIDE the embedding iframe (opened in a new
+            // tab, via an escaped popup, or by navigating to the raw content URL). Without
+            // this, that top-level document would run author JS as the Omeka origin. The
+            // tokens mirror the secure iframe sandbox (scripts + popups, no same-origin).
+            if (\ExeLearning\Service\IframeSandbox::MODE_SECURE === $this->iframeMode) {
+                $directives[] = 'sandbox allow-scripts allow-popups';
+            }
+            $headers->addHeaderLine('Content-Security-Policy', implode('; ', $directives));
 
             // Referrer policy - don't leak info to external sites
             $headers->addHeaderLine('Referrer-Policy', 'same-origin');

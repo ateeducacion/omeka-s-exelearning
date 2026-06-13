@@ -18,6 +18,14 @@ class ContentControllerFactory implements FactoryInterface
 
         $basePath = $localConfig . '/exelearning';
 
-        return new ContentController($basePath);
+        // The iframe-security mode also drives the response CSP: in secure mode the
+        // served HTML carries a `sandbox` directive so the content stays opaque-origin
+        // even when opened outside the embedding iframe (new tab / escaped popup).
+        $settings = $container->get('Omeka\Settings');
+        $mode = \ExeLearning\Service\IframeSandbox::normalizeMode(
+            $settings->get('exelearning_iframe_mode', 'secure')
+        );
+
+        return new ContentController($basePath, $mode);
     }
 }

@@ -255,7 +255,7 @@ class ExeLearningRenderer implements RendererInterface
                     $setting('exelearning_iframe_mode', $defaults['iframe_mode'])
                 ),
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $defaults;
         }
     }

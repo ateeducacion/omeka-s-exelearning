@@ -14,18 +14,21 @@ use PHPUnit\Framework\TestCase;
  */
 class IframeSandboxTest extends TestCase
 {
-    public function testSecureTokensHaveNoSameOrigin(): void
+    public function testSecureTokensHaveNoSameOriginNorPopupEscape(): void
     {
         $tokens = IframeSandbox::tokens(IframeSandbox::MODE_SECURE);
         $this->assertStringNotContainsString('allow-same-origin', $tokens);
+        // An escaped popup could otherwise reopen the content unsandboxed/same-origin.
+        $this->assertStringNotContainsString('allow-popups-to-escape-sandbox', $tokens);
         $this->assertStringContainsString('allow-scripts', $tokens);
         $this->assertStringContainsString('allow-popups', $tokens);
     }
 
-    public function testLegacyTokensIncludeSameOrigin(): void
+    public function testLegacyTokensKeepSameOriginAndPopupEscape(): void
     {
         $tokens = IframeSandbox::tokens(IframeSandbox::MODE_LEGACY);
         $this->assertStringContainsString('allow-same-origin', $tokens);
+        $this->assertStringContainsString('allow-popups-to-escape-sandbox', $tokens);
         $this->assertStringContainsString('allow-scripts', $tokens);
     }
 
@@ -57,6 +60,11 @@ class IframeSandboxTest extends TestCase
             'empty'   => [''],
             'null'    => [null],
             'capital' => ['Legacy'],
+            'array'   => [['legacy']],
+            'object'  => [new \stdClass()],
+            'true'    => [true],
+            'false'   => [false],
+            'int'     => [0],
         ];
     }
 }

@@ -342,6 +342,30 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString("form-action 'none'", $csp);
     }
 
+    public function testSecureModeCspSandboxesTheDocument(): void
+    {
+        // Default controller is secure mode.
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'text/html']);
+
+        $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+        // The response-level sandbox keeps the document opaque even if opened outside
+        // the iframe (new tab / escaped popup / raw URL navigation).
+        $this->assertStringContainsString('sandbox allow-scripts allow-popups', $csp);
+    }
+
+    public function testLegacyModeCspHasNoSandbox(): void
+    {
+        $controller = new ContentController($this->testBasePath, 'legacy');
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($controller, 'addSecurityHeaders', [$headers, 'text/html']);
+
+        $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+        $this->assertStringNotContainsString('sandbox', $csp);
+        // Legacy still keeps the rest of the policy.
+        $this->assertStringContainsString("default-src 'self'", $csp);
+    }
+
     // =========================================================================
     // Constructor tests
     // =========================================================================

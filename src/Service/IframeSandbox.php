@@ -18,18 +18,28 @@ final class IframeSandbox
     public const MODE_SECURE = 'secure';
     public const MODE_LEGACY = 'legacy';
 
-    /** Tokens shared by both modes (opaque-origin safe). */
-    private const BASE_TOKENS = 'allow-scripts allow-popups allow-popups-to-escape-sandbox';
+    /**
+     * Secure tokens: opaque origin (no allow-same-origin) and no
+     * allow-popups-to-escape-sandbox, so a popup the content opens cannot land in
+     * an unsandboxed, same-origin window that would run author JS as Omeka.
+     */
+    private const SECURE_TOKENS = 'allow-scripts allow-popups';
+
+    /** Legacy tokens: the previous same-origin behaviour, kept as an explicit opt-out. */
+    private const LEGACY_TOKENS = 'allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox';
 
     /**
      * Normalize an arbitrary setting value to a known mode (fail-safe to secure).
+     *
+     * Uses a strict comparison so non-string values (arrays, objects, booleans)
+     * never warn/throw and simply fall back to the secure mode.
      *
      * @param mixed $value
      * @return string self::MODE_SECURE or self::MODE_LEGACY
      */
     public static function normalizeMode($value): string
     {
-        return (string) $value === self::MODE_LEGACY ? self::MODE_LEGACY : self::MODE_SECURE;
+        return $value === self::MODE_LEGACY ? self::MODE_LEGACY : self::MODE_SECURE;
     }
 
     /**
@@ -40,8 +50,6 @@ final class IframeSandbox
      */
     public static function tokens($mode): string
     {
-        return self::normalizeMode($mode) === self::MODE_LEGACY
-            ? 'allow-same-origin ' . self::BASE_TOKENS
-            : self::BASE_TOKENS;
+        return self::normalizeMode($mode) === self::MODE_LEGACY ? self::LEGACY_TOKENS : self::SECURE_TOKENS;
     }
 }
