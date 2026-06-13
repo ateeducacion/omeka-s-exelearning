@@ -284,6 +284,7 @@ return [
     'exelearning' => [
         'settings' => [
             'exelearning_viewer_height' => 600,
+            'exelearning_iframe_mode' => 'secure',
         ],
     ],
 ];

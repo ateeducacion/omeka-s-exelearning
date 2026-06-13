@@ -32,6 +32,23 @@ class ConfigForm extends Form
             ],
         ]);
 
+        $this->add([
+            'name' => 'exelearning_iframe_mode',
+            'type' => Element\Select::class,
+            'options' => [
+                'label' => 'Preview iframe security mode', // @translate
+                'info' => 'Secure (recommended): the preview runs in an opaque-origin sandbox, so author HTML/JS cannot read the Omeka page or reach its cookies. Legacy: keeps same-origin (only needed where an opaque iframe cannot be served, e.g. the php-wasm Playground).', // @translate
+                'value_options' => [
+                    'secure' => 'Secure (opaque-origin sandbox)', // @translate
+                    'legacy' => 'Legacy (same-origin)', // @translate
+                ],
+            ],
+            'attributes' => [
+                'required' => false,
+                'value' => 'secure',
+            ],
+        ]);
+
         // Use the bare format label as the option label so the form's
         // multicheckbox view helper translates it against an existing catalog
         // entry (e.g. "IMS Package" -> "Paquete IMS"). The previous

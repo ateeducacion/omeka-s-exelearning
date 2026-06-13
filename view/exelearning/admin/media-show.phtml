@@ -8,6 +8,14 @@
  */
 
 use ExeLearning\Service\DownloadFormats;
+use ExeLearning\Service\IframeSandbox;
+
+$exeIframeMode = IframeSandbox::MODE_SECURE;
+try {
+    $exeIframeMode = IframeSandbox::normalizeMode($this->setting('exelearning_iframe_mode', 'secure'));
+} catch (\Throwable $e) {
+    $exeIframeMode = IframeSandbox::MODE_SECURE;
+}
 
 // Check if user can edit this media and if the editor is installed
 $canEdit = $this->identity() && $this->userIsAllowed('Omeka\Entity\Media', 'update');
@@ -113,13 +121,14 @@ if ($canEdit && $editorInstalled) {
         </a>
         <?php endif; ?>
     </div>
-    <?php // allow-same-origin is required for the php-wasm playground: its
-          // service worker only intercepts requests from a same-origin
-          // document, so an opaque (sandboxed) iframe would 404. ?>
+    <?php // Sandbox tokens come from the iframe-mode setting (default secure):
+          // secure = opaque origin (no allow-same-origin) so author HTML/JS cannot
+          // reach this page; legacy restores allow-same-origin only where an opaque
+          // iframe cannot be served (e.g. the php-wasm Playground). ?>
     <iframe
         class="preview-iframe"
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
-        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        sandbox="<?= $this->escapeHtmlAttr(IframeSandbox::tokens($exeIframeMode)) ?>"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>

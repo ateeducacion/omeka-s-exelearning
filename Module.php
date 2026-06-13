@@ -13,6 +13,7 @@ use Omeka\Mvc\Controller\Plugin\Messenger;
 use Omeka\Stdlib\Message;
 use ExeLearning\Form\ConfigForm;
 use ExeLearning\Service\DownloadFormats;
+use ExeLearning\Service\IframeSandbox;
 use ExeLearning\Service\StaticEditorInstaller;
 
 /**
@@ -756,6 +757,9 @@ JS
         $form->setData([
             'exelearning_viewer_height' => $settings->get('exelearning_viewer_height', 600),
             'exelearning_download_formats' => DownloadFormats::sanitize($storedFormats),
+            'exelearning_iframe_mode' => IframeSandbox::normalizeMode(
+                $settings->get('exelearning_iframe_mode', 'secure')
+            ),
         ]);
 
         $formHtml = $renderer->formCollection($form, false);
@@ -945,6 +949,10 @@ JS
         $settings->set(
             'exelearning_download_formats',
             DownloadFormats::sanitize($config['exelearning_download_formats'] ?? [])
+        );
+        $settings->set(
+            'exelearning_iframe_mode',
+            IframeSandbox::normalizeMode($config['exelearning_iframe_mode'] ?? 'secure')
         );
     }
 }

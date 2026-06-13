@@ -8,6 +8,7 @@ use Omeka\Media\FileRenderer\RendererInterface;
 use Laminas\View\Renderer\PhpRenderer;
 use ExeLearning\Service\ElpFileService;
 use ExeLearning\Service\DownloadFormats;
+use ExeLearning\Service\IframeSandbox;
 
 /**
  * Renderer for eXeLearning files.
@@ -124,7 +125,7 @@ class ExeLearningRenderer implements RendererInterface
         $html .= 'data-exe-content-path="' . $view->escapeHtmlAttr($contentPath) . '" ';
         $html .= 'class="exelearning-iframe" ';
         $html .= 'style="width: 100%; height: ' . (int) $config['height'] . 'px; border: none;" ';
-        $html .= 'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" ';
+        $html .= 'sandbox="' . IframeSandbox::tokens($config['iframe_mode']) . '" ';
         $html .= 'referrerpolicy="no-referrer" ';
         $html .= 'allowfullscreen>';
         $html .= '</iframe>';
@@ -243,12 +244,16 @@ class ExeLearningRenderer implements RendererInterface
     {
         $defaults = [
             'height' => 600,
+            'iframe_mode' => IframeSandbox::MODE_SECURE,
         ];
 
         try {
             $setting = $view->getHelperPluginManager()->get('setting');
             return [
                 'height' => $setting('exelearning_viewer_height', $defaults['height']),
+                'iframe_mode' => IframeSandbox::normalizeMode(
+                    $setting('exelearning_iframe_mode', $defaults['iframe_mode'])
+                ),
             ];
         } catch (\Exception $e) {
             return $defaults;

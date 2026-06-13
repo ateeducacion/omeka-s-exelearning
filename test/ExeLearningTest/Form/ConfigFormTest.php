@@ -95,6 +95,36 @@ class ConfigFormTest extends TestCase
     }
 
     // =========================================================================
+    // Iframe security mode element tests
+    // =========================================================================
+
+    public function testFormHasIframeModeElement(): void
+    {
+        $this->assertTrue($this->form->has('exelearning_iframe_mode'));
+    }
+
+    public function testIframeModeIsSelectElement(): void
+    {
+        $element = $this->form->get('exelearning_iframe_mode');
+        $this->assertInstanceOf(\Laminas\Form\Element\Select::class, $element);
+    }
+
+    public function testIframeModeDefaultsToSecure(): void
+    {
+        $element = $this->form->get('exelearning_iframe_mode');
+        $this->assertEquals('secure', $element->getValue());
+    }
+
+    public function testIframeModeHasSecureAndLegacyOptions(): void
+    {
+        /** @var \Laminas\Form\Element\Select $element */
+        $element = $this->form->get('exelearning_iframe_mode');
+        $options = $element->getValueOptions();
+        $this->assertArrayHasKey('secure', $options);
+        $this->assertArrayHasKey('legacy', $options);
+    }
+
+    // =========================================================================
     // Additional tests
     // =========================================================================
 

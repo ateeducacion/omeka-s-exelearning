@@ -8,6 +8,14 @@
  */
 
 use ExeLearning\Service\DownloadFormats;
+use ExeLearning\Service\IframeSandbox;
+
+$exeIframeMode = IframeSandbox::MODE_SECURE;
+try {
+    $exeIframeMode = IframeSandbox::normalizeMode($this->setting('exelearning_iframe_mode', 'secure'));
+} catch (\Throwable $e) {
+    $exeIframeMode = IframeSandbox::MODE_SECURE;
+}
 
 $exeStoredFormats = null;
 try {
@@ -84,13 +92,14 @@ if ($exeShowDownload) {
             <?php endif; ?>
         </div>
     </div>
-    <?php // allow-same-origin is required: the content is proxied same-origin and,
-          // under the php-wasm playground, the service worker only intercepts
-          // requests from a same-origin document. An opaque (sandboxed) iframe
-          // would bypass it and 404 against the static host. ?>
+    <?php // Sandbox tokens come from the iframe-mode setting (default secure).
+          // Secure = opaque origin (no allow-same-origin): author HTML/JS cannot
+          // reach this page. Legacy restores allow-same-origin only where an
+          // opaque iframe cannot be served (e.g. the php-wasm Playground, whose
+          // service worker only intercepts same-origin documents). ?>
     <iframe
         data-exe-content-path="<?= $this->escapeHtmlAttr($contentPath) ?>"
-        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        sandbox="<?= $this->escapeHtmlAttr(IframeSandbox::tokens($exeIframeMode)) ?>"
         referrerpolicy="no-referrer"
         allowfullscreen></iframe>
 </div>
