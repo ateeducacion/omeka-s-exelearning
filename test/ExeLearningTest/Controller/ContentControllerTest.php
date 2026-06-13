@@ -366,6 +366,22 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString("default-src 'self'", $csp);
     }
 
+    public function testCspAllowsExternalEmbeds(): void
+    {
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'text/html']);
+
+        $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+        // External https: images/video and framed embeds (PDFs, YouTube, Vimeo) are
+        // allowed so authors can include external resources.
+        $this->assertStringContainsString("img-src 'self' data: blob: https:", $csp);
+        $this->assertStringContainsString("media-src 'self' data: blob: https:", $csp);
+        $this->assertStringContainsString("frame-src 'self' https:", $csp);
+        // …but the exfiltration channel stays closed.
+        $this->assertStringContainsString("connect-src 'self'", $csp);
+        $this->assertStringNotContainsString("connect-src 'self' https:", $csp);
+    }
+
     // =========================================================================
     // Constructor tests
     // =========================================================================

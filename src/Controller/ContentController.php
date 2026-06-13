@@ -168,11 +168,16 @@ class ContentController extends AbstractActionController
                 "default-src 'self'",
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
                 "style-src 'self' 'unsafe-inline'",
-                "img-src 'self' data: blob:",
-                "media-src 'self' data: blob:",
+                // Allow external https: images, media and framed embeds (PDFs, YouTube,
+                // Vimeo, …) so authors can include external resources. This is display
+                // only; connect-src stays 'self' so the opaque content cannot exfiltrate
+                // via fetch/XHR/beacon. (NB: third-party video players still need their
+                // own origin, which the opaque sandbox denies — those require legacy mode.)
+                "img-src 'self' data: blob: https:",
+                "media-src 'self' data: blob: https:",
                 "font-src 'self' data:",
                 "connect-src 'self'",
-                "frame-src 'self'",
+                "frame-src 'self' https:",
                 "frame-ancestors 'self'",
                 "form-action 'none'",
                 "base-uri 'self'",
