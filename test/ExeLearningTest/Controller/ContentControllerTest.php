@@ -366,6 +366,30 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString("default-src 'self'", $csp);
     }
 
+    public function testInjectEmbedShimAddsShimInSecureMode(): void
+    {
+        $html = '<html><head></head><body><p>content</p></body></html>';
+        $out = $this->callProtectedMethod($this->controller, 'injectEmbedShim', [$html]);
+
+        $this->assertStringContainsString('exelearning-embed-shim', $out);
+        $this->assertStringContainsString('__exeEmbedWhitelist', $out);
+        $this->assertStringContainsString('youtube-nocookie.com', $out);
+        // The shim source itself is inlined.
+        $this->assertStringContainsString('data-exe-embed-id', $out);
+        // Injected before the closing body tag.
+        $this->assertStringContainsString('</script></body>', $out);
+    }
+
+    public function testInjectEmbedShimIsNoopInLegacyMode(): void
+    {
+        $controller = new ContentController($this->testBasePath, 'legacy');
+        $html = '<html><head></head><body><p>content</p></body></html>';
+        $out = $this->callProtectedMethod($controller, 'injectEmbedShim', [$html]);
+
+        $this->assertSame($html, $out);
+        $this->assertStringNotContainsString('exelearning-embed-shim', $out);
+    }
+
     public function testCspAllowsExternalEmbeds(): void
     {
         $headers = new \Laminas\Http\Headers();

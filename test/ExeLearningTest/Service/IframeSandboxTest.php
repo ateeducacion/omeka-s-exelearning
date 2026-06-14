@@ -67,4 +67,19 @@ class IframeSandboxTest extends TestCase
             'int'     => [0],
         ];
     }
+
+    public function testEmbedWhitelistContainsDefaultVideoHosts(): void
+    {
+        $hosts = IframeSandbox::embedWhitelist();
+        $this->assertContains('www.youtube.com', $hosts);
+        $this->assertContains('youtube-nocookie.com', $hosts);
+        $this->assertContains('player.vimeo.com', $hosts);
+    }
+
+    public function testEmbedWhitelistIsLowercaseAndDeduplicated(): void
+    {
+        $hosts = IframeSandbox::embedWhitelist();
+        $this->assertSame(array_map('strtolower', $hosts), $hosts);
+        $this->assertSame(array_values(array_unique($hosts)), $hosts);
+    }
 }

@@ -79,6 +79,10 @@ class ExeLearningRenderer implements RendererInterface
             $view->assetUrl('js/exelearning-viewer.js', 'ExeLearning')
         );
 
+        // In secure mode the content is opaque, so whitelisted external embeds are
+        // promoted to this page (no-op in legacy, where they already work inline).
+        IframeSandbox::enqueueEmbedRelay($view, $config['iframe_mode']);
+
         // Enqueue the download orchestrator only when the multi-format
         // button will actually be rendered.
         $downloadFormatIds = $this->getEnabledDownloadFormats($view);

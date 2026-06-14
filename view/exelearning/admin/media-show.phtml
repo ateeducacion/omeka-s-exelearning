@@ -46,6 +46,9 @@ if ($canEdit && $editorInstalled) {
     $this->headLink()->appendStylesheet($this->assetUrl('css/exelearning-editor.css', 'ExeLearning'));
     $this->headScript()->appendFile($this->assetUrl('js/exelearning-editor.js', 'ExeLearning'));
 }
+
+// Secure mode: promote whitelisted external embeds to this page (no-op in legacy).
+IframeSandbox::enqueueEmbedRelay($this, $exeIframeMode);
 ?>
 
 <style>

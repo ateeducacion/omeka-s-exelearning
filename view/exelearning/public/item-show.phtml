@@ -33,6 +33,9 @@ if ($exeShowDownload) {
         $this->assetUrl('css/exelearning.css', 'ExeLearning')
     );
 }
+
+// Secure mode: promote whitelisted external embeds to this page (no-op in legacy).
+IframeSandbox::enqueueEmbedRelay($this, $exeIframeMode);
 ?>
 
 <style>

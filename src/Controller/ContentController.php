@@ -137,6 +137,11 @@ class ContentController extends AbstractActionController
             $content = $this->injectTeacherModeCss($content);
         }
 
+        // Promote whitelisted external embeds to the parent (secure mode only).
+        if (strpos($mimeType, 'text/html') !== false) {
+            $content = $this->injectEmbedShim($content);
+        }
+
         $headers->addHeaderLine('Content-Length', (string) strlen($content));
         $response->setContent($content);
 
@@ -253,6 +258,37 @@ class ContentController extends AbstractActionController
         }
 
         return $styleTag . $html;
+    }
+
+    /**
+     * Inject the external-embed shim into the served document (secure mode only).
+     *
+     * In secure mode the content runs opaque, so cross-origin players (YouTube,
+     * Vimeo, …) and PDFs render blank. The shim replaces each whitelisted/PDF iframe
+     * with a placeholder and reports its geometry to the parent, which overlays the
+     * real player inline (see asset/js/exe-embed-shim.js + exe-embed-relay.js). The
+     * whitelist is inlined as window.__exeEmbedWhitelist. No-op in legacy mode.
+     */
+    protected function injectEmbedShim(string $html): string
+    {
+        if (\ExeLearning\Service\IframeSandbox::MODE_SECURE !== $this->iframeMode) {
+            return $html;
+        }
+
+        $shimPath = dirname(__DIR__, 2) . '/asset/js/exe-embed-shim.js';
+        $shim = is_readable($shimPath) ? file_get_contents($shimPath) : false;
+        if ($shim === false || $shim === '') {
+            return $html;
+        }
+
+        $whitelist = json_encode(\ExeLearning\Service\IframeSandbox::embedWhitelist());
+        $script = '<script id="exelearning-embed-shim">window.__exeEmbedWhitelist=' . $whitelist . ';' . $shim . '</script>';
+
+        if (stripos($html, '</body>') !== false) {
+            return preg_replace('/<\/body>/i', $script . '</body>', $html, 1) ?? $html;
+        }
+
+        return $html . $script;
     }
 
     protected function sanitizePath(string $path): ?string

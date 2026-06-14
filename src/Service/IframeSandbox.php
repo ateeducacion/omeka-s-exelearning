@@ -29,6 +29,23 @@ final class IframeSandbox
     private const LEGACY_TOKENS = 'allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox';
 
     /**
+     * Default host whitelist for external video embeds promoted to the parent page.
+     *
+     * In secure mode the content is opaque, so cross-origin players (YouTube/Vimeo)
+     * load blank. Iframes whose src host is on this list are replaced by a placeholder
+     * in the content and rendered as a real player by the host page (see the embed JS).
+     * PDFs are handled separately (by .pdf extension) and need no host entry.
+     */
+    public const DEFAULT_EMBED_HOSTS = [
+        'www.youtube.com',
+        'youtube.com',
+        'www.youtube-nocookie.com',
+        'youtube-nocookie.com',
+        'player.vimeo.com',
+        'vimeo.com',
+    ];
+
+    /**
      * Normalize an arbitrary setting value to a known mode (fail-safe to secure).
      *
      * Uses a strict comparison so non-string values (arrays, objects, booleans)
@@ -51,5 +68,43 @@ final class IframeSandbox
     public static function tokens($mode): string
     {
         return self::normalizeMode($mode) === self::MODE_LEGACY ? self::LEGACY_TOKENS : self::SECURE_TOKENS;
+    }
+
+    /**
+     * Normalized host whitelist for external video embeds (lowercase, de-duplicated).
+     *
+     * @return string[]
+     */
+    public static function embedWhitelist(): array
+    {
+        $clean = [];
+        foreach (self::DEFAULT_EMBED_HOSTS as $host) {
+            $host = strtolower(trim((string) $host));
+            if ($host !== '') {
+                $clean[$host] = true;
+            }
+        }
+        return array_keys($clean);
+    }
+
+    /**
+     * Enqueue the parent-page embed relay (secure mode only).
+     *
+     * The relay finds content iframes by message source, so a single enqueue per
+     * page covers every embed instance. No-op in legacy mode (content is same-origin
+     * there, so external players already render inline). Laminas headScript de-dupes
+     * the file, so callers can invoke this from several view contexts safely.
+     *
+     * @param \Laminas\View\Renderer\PhpRenderer $view
+     * @param mixed $mode
+     */
+    public static function enqueueEmbedRelay(\Laminas\View\Renderer\PhpRenderer $view, $mode): void
+    {
+        if (self::normalizeMode($mode) !== self::MODE_SECURE) {
+            return;
+        }
+        $config = json_encode(['whitelist' => self::embedWhitelist()]);
+        $view->headScript()->appendScript('window.ExeEmbedRelayConfig=' . $config . ';');
+        $view->headScript()->appendFile($view->assetUrl('js/exe-embed-relay.js', 'ExeLearning'));
     }
 }
