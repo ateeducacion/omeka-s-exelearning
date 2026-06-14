@@ -71,6 +71,49 @@ class IframeSandboxTest extends TestCase
         ];
     }
 
+    public function testEmbedModeDefaultsToOpen(): void
+    {
+        // An explicit 'open' value, and an unset value, both resolve to open
+        // (the structural-invariant default, DEC-0061).
+        $this->assertSame(IframeSandbox::EMBED_OPEN, IframeSandbox::embedMode('open'));
+        $this->assertSame(IframeSandbox::EMBED_OPEN, IframeSandbox::embedMode(null));
+        $this->assertSame(IframeSandbox::EMBED_OPEN, IframeSandbox::embedMode());
+    }
+
+    public function testEmbedModeKeepsStrict(): void
+    {
+        $this->assertSame(IframeSandbox::EMBED_STRICT, IframeSandbox::embedMode('strict'));
+    }
+
+    /**
+     * An unset value keeps the intended 'open' default, but any other recognised-but-
+     * not-'open' value (e.g. a tampered setting) fails safe toward the more restrictive
+     * 'strict' policy, never silently weakening to 'open'.
+     *
+     * @dataProvider strictFallbackProvider
+     * @param mixed $value
+     */
+    public function testEmbedModeFailsSafeToStrict($value): void
+    {
+        $this->assertSame(IframeSandbox::EMBED_STRICT, IframeSandbox::embedMode($value));
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public function strictFallbackProvider(): array
+    {
+        return [
+            'strict'  => ['strict'],
+            'garbage' => ['something-else'],
+            'capital' => ['Open'],
+            'array'   => [['open']],
+            'object'  => [new \stdClass()],
+            'true'    => [true],
+            'int'     => [1],
+        ];
+    }
+
     public function testEmbedWhitelistContainsDefaultVideoHosts(): void
     {
         $hosts = IframeSandbox::embedWhitelist();

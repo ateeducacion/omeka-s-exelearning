@@ -760,6 +760,9 @@ JS
             'exelearning_iframe_mode' => IframeSandbox::normalizeMode(
                 $settings->get('exelearning_iframe_mode', 'secure')
             ),
+            'exelearning_embed_mode' => IframeSandbox::embedMode(
+                $settings->get(IframeSandbox::EMBED_OPTION, IframeSandbox::EMBED_OPEN)
+            ),
         ]);
 
         $formHtml = $renderer->formCollection($form, false);
@@ -953,6 +956,10 @@ JS
         $settings->set(
             'exelearning_iframe_mode',
             IframeSandbox::normalizeMode($config['exelearning_iframe_mode'] ?? 'secure')
+        );
+        $settings->set(
+            IframeSandbox::EMBED_OPTION,
+            IframeSandbox::embedMode($config[IframeSandbox::EMBED_OPTION] ?? IframeSandbox::EMBED_OPEN)
         );
     }
 }

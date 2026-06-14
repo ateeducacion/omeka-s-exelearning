@@ -49,6 +49,23 @@ class ConfigForm extends Form
             ],
         ]);
 
+        $this->add([
+            'name' => 'exelearning_embed_mode',
+            'type' => Element\Select::class,
+            'options' => [
+                'label' => 'External embed policy', // @translate
+                'info' => 'Open (recommended): in secure mode any cross-origin https iframe (YouTube, Vimeo, …) is promoted to this page and rendered sandboxed, so it is isolated by the same-origin policy regardless of host. Strict: only a maintained host allowlist with per-provider URL reconstruction, for deployments where even the author is not trusted. Mirrors mod_exelearning\'s embedmode setting.', // @translate
+                'value_options' => [
+                    'open' => 'Open (any cross-origin https embed)', // @translate
+                    'strict' => 'Strict (host allowlist)', // @translate
+                ],
+            ],
+            'attributes' => [
+                'required' => false,
+                'value' => 'open',
+            ],
+        ]);
+
         // Use the bare format label as the option label so the form's
         // multicheckbox view helper translates it against an existing catalog
         // entry (e.g. "IMS Package" -> "Paquete IMS"). The previous

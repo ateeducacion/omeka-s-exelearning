@@ -47,8 +47,15 @@ if ($canEdit && $editorInstalled) {
     $this->headScript()->appendFile($this->assetUrl('js/exelearning-editor.js', 'ExeLearning'));
 }
 
-// Secure mode: promote whitelisted external embeds to this page (no-op in legacy).
-IframeSandbox::enqueueEmbedRelay($this, $exeIframeMode);
+// Secure mode: promote external embeds to this page (no-op in legacy). The embed
+// policy (open default | strict) mirrors mod_exelearning's embedmode setting.
+$exeEmbedMode = null;
+try {
+    $exeEmbedMode = $this->setting(IframeSandbox::EMBED_OPTION, IframeSandbox::EMBED_OPEN);
+} catch (\Throwable $e) {
+    $exeEmbedMode = IframeSandbox::EMBED_OPEN;
+}
+IframeSandbox::enqueueEmbedRelay($this, $exeIframeMode, $exeEmbedMode);
 ?>
 
 <style>

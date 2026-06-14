@@ -79,9 +79,10 @@ class ExeLearningRenderer implements RendererInterface
             $view->assetUrl('js/exelearning-viewer.js', 'ExeLearning')
         );
 
-        // In secure mode the content is opaque, so whitelisted external embeds are
-        // promoted to this page (no-op in legacy, where they already work inline).
-        IframeSandbox::enqueueEmbedRelay($view, $config['iframe_mode']);
+        // In secure mode the content is opaque, so external embeds are promoted to this
+        // page (no-op in legacy, where they already work inline). The embed policy
+        // (open default | strict) mirrors mod_exelearning's embedmode setting (DEC-0061).
+        IframeSandbox::enqueueEmbedRelay($view, $config['iframe_mode'], $config['embed_mode']);
 
         // Enqueue the download orchestrator only when the multi-format
         // button will actually be rendered.
@@ -249,6 +250,7 @@ class ExeLearningRenderer implements RendererInterface
         $defaults = [
             'height' => 600,
             'iframe_mode' => IframeSandbox::MODE_SECURE,
+            'embed_mode' => IframeSandbox::EMBED_OPEN,
         ];
 
         try {
@@ -258,6 +260,8 @@ class ExeLearningRenderer implements RendererInterface
                 'iframe_mode' => IframeSandbox::normalizeMode(
                     $setting('exelearning_iframe_mode', $defaults['iframe_mode'])
                 ),
+                // Raw setting value; IframeSandbox::embedMode() resolves it (open default).
+                'embed_mode' => $setting(IframeSandbox::EMBED_OPTION, IframeSandbox::EMBED_OPEN),
             ];
         } catch (\Throwable $e) {
             return $defaults;

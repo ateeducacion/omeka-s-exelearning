@@ -4,14 +4,14 @@
  * In secure mode the .elpx HTML runs in a sandboxed, opaque-origin iframe. The
  * sandbox origin flag propagates to any nested iframe, so cross-origin players
  * (YouTube, Vimeo, ...) lose their own origin and render blank. This shim, injected
- * by the content proxy only in secure mode, replaces each WHITELISTED external
- * <iframe> with a same-size placeholder and reports its geometry + URL to the parent
- * window, which renders the real player inline on top (see exe-embed-relay.js).
- * Non-whitelisted iframes are left untouched.
+ * by the content proxy only in secure mode, replaces each cross-origin (https) or
+ * .pdf <iframe> with a same-size placeholder and reports its geometry + URL to the
+ * parent window, which renders the real player inline on top (see exe-embed-relay.js).
  *
- * The whitelist is provided by the host as window.__exeEmbedWhitelist (array of
- * lowercase hostnames). postMessage targetOrigin is '*' because the opaque origin
- * has no stable value; the parent authenticates messages by event.source instead.
+ * There is no host list here: the shim promotes any cross-origin https (or .pdf)
+ * iframe as a candidate and the parent relay is the authoritative gate (open vs strict
+ * mode, DEC-0061). postMessage targetOrigin is '*' because the opaque origin has no
+ * stable value; the parent authenticates messages by event.source instead.
  *
  * MIRROR of the canonical eXeLearning embedder source in mod_exelearning
  * (js/exe_embed_shim.js). Keep the promote()/report() logic identical across the three
@@ -43,26 +43,8 @@
 		return;
 	}
 
-	var whitelist = Array.isArray( window.__exeEmbedWhitelist ) ? window.__exeEmbedWhitelist : [];
 	var counter = 0;
 	var scheduled = false;
-
-	function hostOf( url ) {
-		try {
-			return new URL( url, window.location.href ).hostname.toLowerCase();
-		} catch ( e ) {
-			return '';
-		}
-	}
-
-	function isWhitelisted( host ) {
-		for ( var i = 0; i < whitelist.length; i++ ) {
-			if ( whitelist[ i ] === host ) {
-				return true;
-			}
-		}
-		return false;
-	}
 
 	// A URL whose path ends in .pdf is a document embed; PDFs also fail to render
 	// under the opaque sandbox, so they are promoted to the parent too.
@@ -74,8 +56,25 @@
 		}
 	}
 
+	// Whether a src resolves to an https URL on a host other than this document's own
+	// (served) host -- i.e. a cross-origin external embed. The opaque document is still
+	// served from the platform, so window.location.hostname is the platform host and the
+	// comparison is reliable. The parent relay re-validates authoritatively (DEC-0061);
+	// this is only a candidate filter so same-origin content iframes are left untouched.
+	function isCrossOriginHttps( src ) {
+		try {
+			var u = new URL( src, window.location.href );
+			return 'https:' === u.protocol && u.hostname.toLowerCase() !== window.location.hostname.toLowerCase();
+		} catch ( e ) {
+			return false;
+		}
+	}
+
+	// Whether an iframe src should be promoted to the parent: any cross-origin https
+	// embed or a .pdf (both render blank under the opaque sandbox). No host list -- the
+	// parent relay decides what actually renders (open vs strict mode).
 	function isPromotable( src ) {
-		return isWhitelisted( hostOf( src ) ) || isPdfUrl( src );
+		return isCrossOriginHttps( src ) || isPdfUrl( src );
 	}
 
 	function cssSize( value, fallback ) {
