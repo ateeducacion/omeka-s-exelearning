@@ -1,0 +1,28 @@
+{
+  "name": "omeka-s-exelearning",
+  "version": "1.0.0",
+  "description": "Omeka S eXeLearning module.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:e2e:embed": "playwright test -c playwright-embed.config.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/exelearning/omeka-s-exelearning.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/exelearning/omeka-s-exelearning/issues"
+  },
+  "homepage": "https://github.com/exelearning/omeka-s-exelearning#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

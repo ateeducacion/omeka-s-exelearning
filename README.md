@@ -80,6 +80,22 @@ EXELEARNING_EDITOR_REF=vX.Y.Z EXELEARNING_EDITOR_REF_TYPE=tag make build-editor
 2. Click **Edit in eXeLearning**
 3. Make your changes and click **Save to Omeka**
 
+## External embeds in secure mode
+
+In secure mode the `.elpx` content is served inside an opaque-origin sandboxed iframe. That isolation is what keeps untrusted package content from reading or scripting the host page, but it also blanks third-party players (YouTube/Vimeo) and inline PDFs, which refuse to run in an opaque origin.
+
+To restore them, the module promotes those embeds to the parent page and renders them inline:
+
+- **In-iframe shim** (`asset/js/exe-embed-shim.js`): inside the sandbox it finds whitelisted video iframes, any `https` `.pdf` iframe, and local package PDFs, replaces each with a placeholder, and `postMessage`s the embed URL plus geometry to the parent.
+- **Parent relay** (`asset/js/exe-embed-relay.js`): validates each URL against the host whitelist (YouTube/Vimeo hosts, plus PDFs), rebuilds the canonical player URL, and overlays the real player on top of the placeholder so it lines up with the content.
+
+A cross-browser (Firefox) Playwright e2e exercises this against a static harness with the real shim/relay (no Omeka runtime needed):
+
+```bash
+npm install            # once, to fetch @playwright/test
+npm run test:e2e:embed # serves the harness and runs the Firefox spec
+```
+
 ## Development
 
 ```bash
