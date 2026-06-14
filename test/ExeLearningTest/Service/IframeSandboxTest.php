@@ -22,6 +22,8 @@ class IframeSandboxTest extends TestCase
         $this->assertStringNotContainsString('allow-popups-to-escape-sandbox', $tokens);
         $this->assertStringContainsString('allow-scripts', $tokens);
         $this->assertStringContainsString('allow-popups', $tokens);
+        // allow-forms is required so the form-based iDevices can submit in the sandbox.
+        $this->assertStringContainsString('allow-forms', $tokens);
     }
 
     public function testLegacyTokensKeepSameOriginAndPopupEscape(): void
@@ -30,6 +32,7 @@ class IframeSandboxTest extends TestCase
         $this->assertStringContainsString('allow-same-origin', $tokens);
         $this->assertStringContainsString('allow-popups-to-escape-sandbox', $tokens);
         $this->assertStringContainsString('allow-scripts', $tokens);
+        $this->assertStringContainsString('allow-forms', $tokens);
     }
 
     public function testNormalizeModeKeepsLegacy(): void
@@ -74,6 +77,8 @@ class IframeSandboxTest extends TestCase
         $this->assertContains('www.youtube.com', $hosts);
         $this->assertContains('youtube-nocookie.com', $hosts);
         $this->assertContains('player.vimeo.com', $hosts);
+        $this->assertContains('www.dailymotion.com', $hosts);
+        $this->assertContains('mediateca.educa.madrid.org', $hosts);
     }
 
     public function testEmbedWhitelistIsLowercaseAndDeduplicated(): void

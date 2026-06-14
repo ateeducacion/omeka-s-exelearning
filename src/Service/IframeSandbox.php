@@ -21,12 +21,15 @@ final class IframeSandbox
     /**
      * Secure tokens: opaque origin (no allow-same-origin) and no
      * allow-popups-to-escape-sandbox, so a popup the content opens cannot land in
-     * an unsandboxed, same-origin window that would run author JS as Omeka.
+     * an unsandboxed, same-origin window that would run author JS as Omeka. allow-forms
+     * is required so the form-based eXeLearning iDevices can submit inside the sandbox;
+     * it is orthogonal to allow-same-origin and does not weaken isolation. Aligned with
+     * mod_exelearning's canonical token set (DEC-0059/DEC-0062).
      */
-    private const SECURE_TOKENS = 'allow-scripts allow-popups';
+    private const SECURE_TOKENS = 'allow-scripts allow-popups allow-forms';
 
     /** Legacy tokens: the previous same-origin behaviour, kept as an explicit opt-out. */
-    private const LEGACY_TOKENS = 'allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox';
+    private const LEGACY_TOKENS = 'allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox';
 
     /**
      * Default host whitelist for external video embeds promoted to the parent page.
@@ -43,6 +46,10 @@ final class IframeSandbox
         'youtube-nocookie.com',
         'player.vimeo.com',
         'vimeo.com',
+        'www.dailymotion.com',
+        'dailymotion.com',
+        'geo.dailymotion.com',
+        'mediateca.educa.madrid.org',
     ];
 
     /**

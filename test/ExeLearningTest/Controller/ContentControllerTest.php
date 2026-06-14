@@ -350,8 +350,9 @@ class ContentControllerTest extends TestCase
 
         $csp = $headers->get('Content-Security-Policy')->getFieldValue();
         // The response-level sandbox keeps the document opaque even if opened outside
-        // the iframe (new tab / escaped popup / raw URL navigation).
-        $this->assertStringContainsString('sandbox allow-scripts allow-popups', $csp);
+        // the iframe (new tab / escaped popup / raw URL navigation). It mirrors the
+        // secure iframe tokens incl. allow-forms so iDevice forms submit.
+        $this->assertStringContainsString('sandbox allow-scripts allow-popups allow-forms', $csp);
     }
 
     public function testLegacyModeCspHasNoSandbox(): void

@@ -373,8 +373,9 @@ class ExeLearningRendererTest extends TestCase
 
         $result = $renderer->render($view, $media);
 
-        // Secure default: opaque-origin tokens, with no same-origin and no popup escape.
-        $this->assertStringContainsString('sandbox="allow-scripts allow-popups"', $result);
+        // Secure default: opaque-origin tokens (scripts + popups + forms), with no
+        // same-origin and no popup escape. allow-forms lets the iDevice forms submit.
+        $this->assertStringContainsString('sandbox="allow-scripts allow-popups allow-forms"', $result);
         $this->assertStringNotContainsString('allow-same-origin', $result);
         $this->assertStringNotContainsString('allow-popups-to-escape-sandbox', $result);
         $this->assertStringContainsString('referrerpolicy="no-referrer"', $result);

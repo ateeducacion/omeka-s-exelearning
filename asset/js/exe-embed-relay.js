@@ -13,7 +13,11 @@
  *
  * Config: window.ExeEmbedRelayConfig = { whitelist: [ hostnames... ] }.
  *
- * Part of the eXeLearning embedder family (Omeka S module).
+ * MIRROR of the canonical eXeLearning embedder source in mod_exelearning
+ * (js/exe_embed_relay.js). Keep the validate()/sync() logic identical across the three
+ * embedders (mod, wp, omeka); only the export wrapper differs (this one is an
+ * auto-running IIFE reading window.ExeEmbedRelayConfig). tools/check-embed-sync.mjs in
+ * mod_exelearning flags drift. Part of the eXeLearning embedder family (Omeka S module).
  */
 ( function () {
 	'use strict';
@@ -81,6 +85,15 @@
 			if ( host.indexOf( 'vimeo' ) !== -1 ) {
 				match = url.pathname.match( /^\/video\/([0-9]+)$/ );
 				return match ? { url: 'https://player.vimeo.com/video/' + match[ 1 ], kind: 'video' } : null;
+			}
+			if ( host.indexOf( 'dailymotion' ) !== -1 ) {
+				match = url.pathname.match( /^\/embed\/video\/([A-Za-z0-9]{5,})$/ );
+				return match ? { url: 'https://www.dailymotion.com/embed/video/' + match[ 1 ], kind: 'video' } : null;
+			}
+			if ( 'mediateca.educa.madrid.org' === host ) {
+				// EducaMadrid / Mediateca de Madrid embed: /video/{id}/fs (watch URL is /video/{id}).
+				match = url.pathname.match( /^\/video\/([A-Za-z0-9]{8,})(?:\/fs)?$/ );
+				return match ? { url: 'https://mediateca.educa.madrid.org/video/' + match[ 1 ] + '/fs', kind: 'video' } : null;
 			}
 		}
 
@@ -182,6 +195,10 @@
 			frame.setAttribute( 'referrerpolicy', 'no-referrer' );
 		}
 		frame.src = result.url;
+		// Tag the player with the URL it renders so sync() can detect when a reused
+		// embed id (the in-iframe shim restarts its counter per page) now points at a
+		// different URL and must be replaced rather than just repositioned.
+		frame.setAttribute( 'data-exe-embed-src', result.url );
 		return frame;
 	}
 
@@ -201,15 +218,28 @@
 			}
 			seen[ embed.id ] = true;
 			var player = entry.players[ embed.id ];
+			// After the content navigates, the shim reuses ids (exe-embed-1, ...) for
+			// the new page's embeds. If this id now renders a different URL, drop the
+			// stale player so the previous page's video does not linger here.
+			if ( player && player.getAttribute( 'data-exe-embed-src' ) !== result.url ) {
+				player.parentNode.removeChild( player );
+				delete entry.players[ embed.id ];
+				player = null;
+			}
 			if ( ! player ) {
 				player = makePlayer( result );
 				entry.el.appendChild( player );
 				entry.players[ embed.id ] = player;
 			}
+			// Defence in depth against clickjacking: the overlay is clamped to the
+			// content iframe's box and clips with overflow:hidden, so a player can never
+			// cover host UI outside the iframe. Cap the player size to the overlay too
+			// (the content reports geometry, the parent owns rendering).
+			var rect = entry.iframe.getBoundingClientRect();
 			player.style.left = embed.x + 'px';
 			player.style.top = embed.y + 'px';
-			player.style.width = embed.w + 'px';
-			player.style.height = embed.h + 'px';
+			player.style.width = Math.min( embed.w, rect.width ) + 'px';
+			player.style.height = Math.min( embed.h, rect.height ) + 'px';
 		} );
 		Object.keys( entry.players ).forEach( function ( id ) {
 			if ( ! seen[ id ] ) {

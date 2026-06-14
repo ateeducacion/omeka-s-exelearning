@@ -191,9 +191,12 @@ class ContentController extends AbstractActionController
             // opaque origin even when loaded OUTSIDE the embedding iframe (opened in a new
             // tab, via an escaped popup, or by navigating to the raw content URL). Without
             // this, that top-level document would run author JS as the Omeka origin. The
-            // tokens mirror the secure iframe sandbox (scripts + popups, no same-origin).
+            // tokens mirror the secure iframe sandbox (IframeSandbox SECURE_TOKENS): scripts +
+            // popups + forms, no same-origin. allow-forms lets the form-based iDevices submit
+            // inside the opaque sandbox; a CSP sandbox without it would block submission even
+            // though the iframe attribute permits it (the effective sandbox is the intersection).
             if (\ExeLearning\Service\IframeSandbox::MODE_SECURE === $this->iframeMode) {
-                $directives[] = 'sandbox allow-scripts allow-popups';
+                $directives[] = 'sandbox allow-scripts allow-popups allow-forms';
             }
             $headers->addHeaderLine('Content-Security-Policy', implode('; ', $directives));
 
