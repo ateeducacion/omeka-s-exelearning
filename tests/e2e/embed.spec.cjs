@@ -7,7 +7,10 @@ test('promotes whitelisted video + relative local PDF to inline parent players (
     const players = page.locator('.exe-embed-overlay iframe');
     await expect.poll(() => players.count(), { timeout: 15000 }).toBe(2);
     const srcs = await players.evaluateAll((els) => els.map((e) => e.src));
-    expect(srcs.some((s) => s.includes('youtube-nocookie.com/embed/aqz-KE-bpKQ'))).toBe(true);
+    const hosts = srcs.map((s) => {
+        try { return new URL(s).hostname.toLowerCase(); } catch (e) { return ''; }
+    });
+    expect(srcs.some((s) => /^https:\/\/www\.youtube-nocookie\.com\/embed\/aqz-KE-bpKQ\b/.test(s))).toBe(true);
     expect(srcs.some((s) => /\/local\.pdf$/.test(s))).toBe(true);
-    expect(srcs.some((s) => s.includes('example.com'))).toBe(false);
+    expect(hosts).not.toContain('example.com');
 });
