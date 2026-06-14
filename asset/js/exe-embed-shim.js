@@ -96,7 +96,16 @@
 			var placeholder = document.createElement( 'div' );
 			counter += 1;
 			placeholder.setAttribute( 'data-exe-embed-id', 'exe-embed-' + counter );
-			placeholder.setAttribute( 'data-exe-embed-url', src );
+			// Report an ABSOLUTE url: the shim runs inside the content, so resolve the
+			// (possibly relative) src against the content location. The parent relay
+			// cannot — it would resolve a relative url against the host page instead.
+			var absoluteUrl = src;
+			try {
+				absoluteUrl = new URL( src, window.location.href ).href;
+			} catch ( e ) {
+				absoluteUrl = src;
+			}
+			placeholder.setAttribute( 'data-exe-embed-url', absoluteUrl );
 			placeholder.className = frame.className;
 			placeholder.style.display = 'block';
 			placeholder.style.maxWidth = '100%';
