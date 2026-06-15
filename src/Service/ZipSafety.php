@@ -51,6 +51,51 @@ final class ZipSafety
     }
 
     /**
+     * Whether an archive entry is forbidden even if its path is otherwise safe.
+     *
+     * Server configuration files and PHP-capable extensions must never be
+     * extracted from user-controlled archives because they can become executable
+     * on some Apache/PHP deployments when direct access is possible. This is a
+     * defense-in-depth deny-list on top of isUnsafeEntry(); a single forbidden
+     * entry rejects the whole archive.
+     */
+    public static function isForbiddenEntry(string $name): bool
+    {
+        // Normalize separators and reduce to the basename for comparison.
+        $normalized = str_replace('\\', '/', $name);
+        $slash = strrpos($normalized, '/');
+        $basename = $slash === false ? $normalized : substr($normalized, $slash + 1);
+        $lower = strtolower($basename);
+
+        // Server-configuration files that must never be extracted.
+        $forbiddenBasenames = [
+            '.htaccess',
+            '.htpasswd',
+            '.user.ini',
+            'php.ini',
+            'web.config',
+        ];
+        if (in_array($lower, $forbiddenBasenames, true)) {
+            return true;
+        }
+
+        // Server-executable extensions that must never be extracted.
+        $forbiddenExtensions = [
+            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar',
+            'shtml', 'cgi', 'pl', 'py', 'asp', 'aspx', 'jsp', 'jspx',
+        ];
+        $dot = strrpos($lower, '.');
+        if ($dot !== false) {
+            $extension = substr($lower, $dot + 1);
+            if (in_array($extension, $forbiddenExtensions, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Open a ZIP file and extract it safely into $destDir.
      *
      * @throws \RuntimeException on an unreadable archive or any unsafe entry.
@@ -101,6 +146,9 @@ final class ZipSafety
             $name = (string) $stat['name'];
             if (self::isUnsafeEntry($name)) {
                 throw new \RuntimeException('Refused unsafe archive entry: ' . $name);
+            }
+            if (self::isForbiddenEntry($name)) {
+                throw new \RuntimeException('Refused forbidden archive entry: ' . $name);
             }
 
             $target = $destReal . '/' . ltrim(str_replace('\\', '/', $name), '/');

@@ -71,10 +71,14 @@ class ZipSafetyTest extends TestCase
             'leading slash' => ['/etc/passwd'],
             'backslash' => ['a\\b.txt'],
             'parent traversal' => ['../evil.css'],
+            'parent traversal txt' => ['../evil.txt'],
+            'absolute path txt' => ['/absolute/path.txt'],
             'mid traversal' => ['a/../../evil'],
             'trailing dotdot' => ['a/..'],
             'stream wrapper' => ['php://filter/x'],
+            'phar wrapper' => ['phar://evil'],
             'http wrapper' => ['http://evil/x'],
+            'backslash folder' => ['folder\\evil.txt'],
         ];
     }
 
@@ -95,6 +99,55 @@ class ZipSafetyTest extends TestCase
             'dotfile' => ['.htaccess'],
             'name with dots' => ['a.b.c.css'],
             'dotdot in filename' => ['my..file.txt'],
+        ];
+    }
+
+    // ------------------------------------------------------------------
+    // isForbiddenEntry()
+    // ------------------------------------------------------------------
+
+    /**
+     * @dataProvider forbiddenEntryProvider
+     */
+    public function testIsForbiddenEntryRejects(string $name): void
+    {
+        $this->assertTrue(ZipSafety::isForbiddenEntry($name));
+    }
+
+    public function forbiddenEntryProvider(): array
+    {
+        return [
+            // Server-configuration files.
+            'htaccess' => ['.htaccess'],
+            'nested htaccess' => ['folder/.htaccess'],
+            'user ini' => ['.user.ini'],
+            'php ini' => ['php.ini'],
+            'web config' => ['web.config'],
+            // Server-executable extensions (case-insensitive).
+            'php script' => ['shell.php'],
+            'phtml uppercase' => ['assets/shell.PHTML'],
+            'phar payload' => ['assets/payload.phar'],
+            'cgi script' => ['assets/run.cgi'],
+        ];
+    }
+
+    /**
+     * @dataProvider forbiddenSafeEntryProvider
+     */
+    public function testIsForbiddenEntryAllows(string $name): void
+    {
+        $this->assertFalse(ZipSafety::isForbiddenEntry($name));
+    }
+
+    public function forbiddenSafeEntryProvider(): array
+    {
+        return [
+            'content xml' => ['content.xml'],
+            'index html' => ['index.html'],
+            'app js' => ['assets/app.js'],
+            'style css' => ['assets/style.css'],
+            'image svg' => ['assets/image.svg'],
+            'readme txt' => ['assets/readme.txt'],
         ];
     }
 
@@ -145,6 +198,28 @@ class ZipSafetyTest extends TestCase
         } finally {
             // The escaped file must never have been written outside dest.
             $this->assertFileDoesNotExist($this->tmpRoot . '/escape.txt');
+        }
+    }
+
+    public function testExtractRejectsForbiddenEntry(): void
+    {
+        // Inert text contents only; no executable code is included.
+        $zip = $this->makeZip([
+            'content.xml' => '<package></package>',
+            'index.html' => '<html><body>ok</body></html>',
+            '.htaccess' => "AddType application/x-httpd-php .txt\n",
+            'payload.txt' => 'inert text payload',
+        ]);
+        $dest = $this->tmpRoot . '/out';
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/forbidden archive entry/');
+        try {
+            ZipSafety::extractFile($zip, $dest);
+        } finally {
+            // The forbidden entry and its companion payload must not be left behind.
+            $this->assertFileDoesNotExist($dest . '/.htaccess');
+            $this->assertFileDoesNotExist($dest . '/payload.txt');
         }
     }
 
