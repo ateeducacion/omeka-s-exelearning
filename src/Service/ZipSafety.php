@@ -58,6 +58,14 @@ final class ZipSafety
      * on some Apache/PHP deployments when direct access is possible. This is a
      * defense-in-depth deny-list on top of isUnsafeEntry(); a single forbidden
      * entry rejects the whole archive.
+     *
+     * Trailing dots and whitespace are stripped first because some Windows/IIS
+     * stacks ignore them (so "shell.php." or "shell.php " can still execute).
+     * PHP-capable extensions are rejected in any position of the name (e.g.
+     * "shell.php.txt"), since Apache mod_mime with AddHandler executes a file
+     * whenever ".php" appears among its extensions; the remaining
+     * server-executable extensions are only matched as the final extension to
+     * avoid false positives on legitimate assets such as "pl.png" or "py.svg".
      */
     public static function isForbiddenEntry(string $name): bool
     {
@@ -66,6 +74,8 @@ final class ZipSafety
         $slash = strrpos($normalized, '/');
         $basename = $slash === false ? $normalized : substr($normalized, $slash + 1);
         $lower = strtolower($basename);
+        // Strip trailing dots/whitespace that some servers ignore.
+        $stripped = rtrim($lower, " \t\n\r\0\x0B.");
 
         // Server-configuration files that must never be extracted.
         $forbiddenBasenames = [
@@ -75,19 +85,29 @@ final class ZipSafety
             'php.ini',
             'web.config',
         ];
-        if (in_array($lower, $forbiddenBasenames, true)) {
+        if (in_array($stripped, $forbiddenBasenames, true)) {
             return true;
         }
 
-        // Server-executable extensions that must never be extracted.
-        $forbiddenExtensions = [
-            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar',
-            'shtml', 'cgi', 'pl', 'py', 'asp', 'aspx', 'jsp', 'jspx',
+        // PHP-capable extensions are dangerous in any position of the name.
+        $phpFamily = [
+            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'shtml',
         ];
-        $dot = strrpos($lower, '.');
+        foreach (explode('.', $stripped) as $part) {
+            if (in_array(trim($part), $phpFamily, true)) {
+                return true;
+            }
+        }
+
+        // Other server-executable extensions are matched as the final extension only.
+        $finalExtensions = array_merge(
+            $phpFamily,
+            ['cgi', 'pl', 'py', 'asp', 'aspx', 'jsp', 'jspx']
+        );
+        $dot = strrpos($stripped, '.');
         if ($dot !== false) {
-            $extension = substr($lower, $dot + 1);
-            if (in_array($extension, $forbiddenExtensions, true)) {
+            $extension = substr($stripped, $dot + 1);
+            if (in_array($extension, $finalExtensions, true)) {
                 return true;
             }
         }

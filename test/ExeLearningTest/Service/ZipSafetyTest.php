@@ -119,8 +119,11 @@ class ZipSafetyTest extends TestCase
         return [
             // Server-configuration files.
             'htaccess' => ['.htaccess'],
+            'htaccess uppercase' => ['.HTACCESS'],
             'nested htaccess' => ['folder/.htaccess'],
+            'htpasswd' => ['.htpasswd'],
             'user ini' => ['.user.ini'],
+            'nested user ini' => ['assets/.user.ini'],
             'php ini' => ['php.ini'],
             'web config' => ['web.config'],
             // Server-executable extensions (case-insensitive).
@@ -128,6 +131,12 @@ class ZipSafetyTest extends TestCase
             'phtml uppercase' => ['assets/shell.PHTML'],
             'phar payload' => ['assets/payload.phar'],
             'cgi script' => ['assets/run.cgi'],
+            // Extension smuggling: PHP family in any position, trailing dot/space.
+            'php double ext' => ['shell.php.txt'],
+            'php mid ext upper' => ['assets/x.PHP.png'],
+            'php trailing dot' => ['file.php.'],
+            'php trailing space' => ['file.php '],
+            'php backslash dir' => ['folder\\shell.PHP'],
         ];
     }
 
@@ -148,6 +157,11 @@ class ZipSafetyTest extends TestCase
             'style css' => ['assets/style.css'],
             'image svg' => ['assets/image.svg'],
             'readme txt' => ['assets/readme.txt'],
+            // Regression guards: PHP-family-only policy must not over-block these.
+            'polish png' => ['flags/pl.png'],
+            'python svg' => ['icons/py.svg'],
+            'cgi double ext' => ['assets/shell.cgi.txt'],
+            'minified js' => ['assets/jquery.min.js'],
         ];
     }
 
@@ -220,6 +234,25 @@ class ZipSafetyTest extends TestCase
             // The forbidden entry and its companion payload must not be left behind.
             $this->assertFileDoesNotExist($dest . '/.htaccess');
             $this->assertFileDoesNotExist($dest . '/payload.txt');
+        }
+    }
+
+    public function testExtractRejectsExecutableEntry(): void
+    {
+        // The entry is named like a PHP script but holds inert text only.
+        $zip = $this->makeZip([
+            'content.xml' => '<package></package>',
+            'index.html' => '<html><body>ok</body></html>',
+            'payload.php' => 'inert placeholder text',
+        ]);
+        $dest = $this->tmpRoot . '/out';
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/forbidden archive entry/');
+        try {
+            ZipSafety::extractFile($zip, $dest);
+        } finally {
+            $this->assertFileDoesNotExist($dest . '/payload.php');
         }
     }
 
