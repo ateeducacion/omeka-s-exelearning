@@ -234,6 +234,10 @@ class ZipSafetyTest extends TestCase
             // The forbidden entry and its companion payload must not be left behind.
             $this->assertFileDoesNotExist($dest . '/.htaccess');
             $this->assertFileDoesNotExist($dest . '/payload.txt');
+            // Atomic rejection: even the benign entries listed before the forbidden
+            // one must not have been written (validate-then-write two-pass).
+            $this->assertFileDoesNotExist($dest . '/content.xml');
+            $this->assertFileDoesNotExist($dest . '/index.html');
         }
     }
 
@@ -253,6 +257,10 @@ class ZipSafetyTest extends TestCase
             ZipSafety::extractFile($zip, $dest);
         } finally {
             $this->assertFileDoesNotExist($dest . '/payload.php');
+            // Atomic rejection: benign entries listed before the forbidden one are
+            // not written either.
+            $this->assertFileDoesNotExist($dest . '/content.xml');
+            $this->assertFileDoesNotExist($dest . '/index.html');
         }
     }
 

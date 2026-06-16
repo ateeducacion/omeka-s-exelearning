@@ -157,7 +157,8 @@ final class ZipSafety
             throw new \RuntimeException('Could not create the extraction directory.');
         }
 
-        $totalBytes = 0;
+        // First pass: validate every entry before writing anything, so a forbidden
+        // or unsafe entry rejects the whole archive atomically (no partial extraction).
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $stat = $zip->statIndex($i);
             if ($stat === false) {
@@ -175,6 +176,19 @@ final class ZipSafety
             if ($target !== $destReal && strpos($target, $destReal . '/') !== 0) {
                 throw new \RuntimeException('Refused path traversal in archive entry: ' . $name);
             }
+        }
+
+        // Second pass: every entry has been validated, now write them to disk. The
+        // zip-bomb byte cap stays here because it must be measured on the real
+        // decompressed bytes, not the attacker-controlled declared sizes.
+        $totalBytes = 0;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            if ($stat === false) {
+                continue;
+            }
+            $name = (string) $stat['name'];
+            $target = $destReal . '/' . ltrim(str_replace('\\', '/', $name), '/');
 
             if (substr($name, -1) === '/') {
                 self::ensureDir($target);
