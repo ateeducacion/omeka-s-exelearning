@@ -64,7 +64,11 @@
 	function isCrossOriginHttps( src ) {
 		try {
 			var u = new URL( src, window.location.href );
-			return 'https:' === u.protocol && u.hostname.toLowerCase() !== window.location.hostname.toLowerCase();
+			// Strip a single trailing dot so the host in its FQDN-root form ('host.')
+			// counts as same-host and is not reported as a candidate.
+			var host = u.hostname.toLowerCase().replace( /\.$/, '' );
+			var here = window.location.hostname.toLowerCase().replace( /\.$/, '' );
+			return 'https:' === u.protocol && host !== here;
 		} catch ( e ) {
 			return false;
 		}

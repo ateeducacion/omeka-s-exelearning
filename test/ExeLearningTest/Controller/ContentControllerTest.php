@@ -294,6 +294,8 @@ class ContentControllerTest extends TestCase
 
         $this->assertNotNull($headers->get('Content-Security-Policy'));
         $this->assertNotNull($headers->get('Referrer-Policy'));
+        // Secure mode (the default) sends no-referrer on the HTML document too.
+        $this->assertEquals('no-referrer', $headers->get('Referrer-Policy')->getFieldValue());
         $this->assertNotNull($headers->get('Permissions-Policy'));
     }
 
@@ -307,6 +309,11 @@ class ContentControllerTest extends TestCase
 
         // CSP should NOT be added for non-HTML content
         $this->assertNull($headers->get('Content-Security-Policy'));
+
+        // …but in secure mode (the default) even a non-HTML file now carries
+        // Referrer-Policy: no-referrer (PDFs/CSS no longer leak the referrer).
+        $this->assertNotNull($headers->get('Referrer-Policy'));
+        $this->assertEquals('no-referrer', $headers->get('Referrer-Policy')->getFieldValue());
     }
 
     public function testAddSecurityHeadersForCss(): void
@@ -372,9 +379,7 @@ class ContentControllerTest extends TestCase
         $html = '<html><head></head><body><p>content</p></body></html>';
         $out = $this->callProtectedMethod($this->controller, 'injectEmbedShim', [$html]);
 
-        $this->assertStringContainsString('exelearning-embed-shim', $out);
-        $this->assertStringContainsString('__exeEmbedWhitelist', $out);
-        $this->assertStringContainsString('youtube-nocookie.com', $out);
+        $this->assertStringContainsString('id="exelearning-embed-shim"', $out);
         // The shim source itself is inlined.
         $this->assertStringContainsString('data-exe-embed-id', $out);
         // Injected before the closing body tag.

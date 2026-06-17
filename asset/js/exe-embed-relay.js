@@ -117,15 +117,31 @@
 	}
 
 	/**
+	 * Lowercase a hostname and strip a single trailing dot. 'host.example.org.' (the
+	 * FQDN-root form) resolves to the same vhost as 'host.example.org' but compares
+	 * unequal as a raw string, so without this it would slip past the same-origin /
+	 * related-to-host gate below and be promoted as a cross-origin player.
+	 *
+	 * @param {string} host The hostname.
+	 * @return {string} The normalised hostname.
+	 */
+	function normalizeHost( host ) {
+		return ( host || '' ).toLowerCase().replace( /\.$/, '' );
+	}
+
+	/**
 	 * Whether a host equals, is a subdomain of, or is a superdomain of the host page's
 	 * host (dotted boundary so 'evil-host.example' does not match 'host.example'). Such
-	 * hosts may share the host page's cookies, so they are rejected.
+	 * hosts may share the host page's cookies, so they are rejected. Both sides are
+	 * normalised so the trailing-dot FQDN-root form cannot evade the comparison.
 	 *
 	 * @param {string} host    The candidate host.
 	 * @param {string} lmsHost The host page's host.
 	 * @return {boolean} True when the host is related to the host page.
 	 */
 	function isRelatedToLms( host, lmsHost ) {
+		host = normalizeHost( host );
+		lmsHost = normalizeHost( lmsHost );
 		if ( ! lmsHost ) {
 			return false;
 		}
@@ -152,11 +168,11 @@
 		if ( url.origin === window.location.origin ) {
 			return false;
 		}
-		var host = url.hostname.toLowerCase();
+		var host = normalizeHost( url.hostname );
 		if ( isIpOrLocalHost( host ) ) {
 			return false;
 		}
-		var lmshost = ( window.location && window.location.hostname ) ? window.location.hostname.toLowerCase() : '';
+		var lmshost = ( window.location && window.location.hostname ) ? window.location.hostname : '';
 		if ( isRelatedToLms( host, lmshost ) ) {
 			return false;
 		}
@@ -314,8 +330,8 @@
 			return entry;
 		}
 
-		function positionOverlay( entry ) {
-			var rect = entry.iframe.getBoundingClientRect();
+		function positionOverlay( entry, rect ) {
+			rect = rect || entry.iframe.getBoundingClientRect();
 			var scrollX = window.pageXOffset || document.documentElement.scrollLeft || 0;
 			var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
 			entry.el.style.left = ( rect.left + scrollX ) + 'px';
@@ -345,7 +361,11 @@
 		}
 
 		function sync( entry, embeds, contentSrc ) {
-			positionOverlay( entry );
+			// The content iframe's box is invariant across this sync pass (the loop only
+			// mutates the overlay and its players), so read it once and reuse it for the
+			// overlay position and every player clamp -- avoids a forced reflow per embed.
+			var rect = entry.iframe.getBoundingClientRect();
+			positionOverlay( entry, rect );
 			var seen = {};
 			embeds.forEach( function ( embed ) {
 				if ( ! embed || typeof embed.id !== 'string' ) {
@@ -380,7 +400,7 @@
 				// content iframe's box and clips with overflow:hidden, so a player can
 				// never cover host UI outside the iframe. Cap the player size to the
 				// overlay too (the content reports geometry, the parent owns rendering).
-				var rect = entry.iframe.getBoundingClientRect();
+				// Reuses the iframe rect read once at the top of this pass.
 				player.style.left = embed.x + 'px';
 				player.style.top = embed.y + 'px';
 				player.style.width = Math.min( embed.w, rect.width ) + 'px';
@@ -455,19 +475,28 @@
 		};
 	}
 
-	// Browser bootstrap: expose the factory and helpers, then auto-run a relay from the
-	// host-injected config (window.ExeEmbedRelayConfig is set before this script loads).
-	window.exeEmbedRelay = {
+	// Expose the factory and helpers two ways from a single body.
+	var exp = {
 		buildWhitelist: buildWhitelist,
 		contentDir: contentDir,
 		packageId: packageId,
 		isSameOriginPackageFile: isSameOriginPackageFile,
 		isIpOrLocalHost: isIpOrLocalHost,
+		normalizeHost: normalizeHost,
 		isRelatedToLms: isRelatedToLms,
 		isCrossOriginHttps: isCrossOriginHttps,
 		validate: validate,
 		makePlayer: makePlayer,
 		createRelay: createRelay
 	};
-	createRelay( window.ExeEmbedRelayConfig || {} ).init();
+	// Test runner (Vitest/Node) consumes module.exports; a bare require() is side-effect-free.
+	if ( typeof module !== 'undefined' && module.exports ) {
+		module.exports = exp;
+	}
+	// Browser bootstrap: expose the factory and helpers on window, then auto-run a relay
+	// from the host-injected config (window.ExeEmbedRelayConfig is set before this loads).
+	if ( typeof window !== 'undefined' ) {
+		window.exeEmbedRelay = exp;
+		createRelay( window.ExeEmbedRelayConfig || {} ).init();
+	}
 } )();

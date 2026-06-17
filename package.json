@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:js": "vitest run",
     "test:e2e:embed": "playwright test -c playwright-embed.config.cjs"
   },
   "repository": {
@@ -23,6 +24,8 @@
   },
   "homepage": "https://github.com/exelearning/omeka-s-exelearning#readme",
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "happy-dom": "^15.11.7",
+    "vitest": "^2.1.8"
   }
 }

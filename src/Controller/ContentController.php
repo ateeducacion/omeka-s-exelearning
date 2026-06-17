@@ -162,6 +162,13 @@ class ContentController extends AbstractActionController
         // Prevent MIME type sniffing
         $headers->addHeaderLine('X-Content-Type-Options', 'nosniff');
 
+        // In secure mode, send Referrer-Policy: no-referrer on EVERY served file (incl.
+        // PDFs, CSS, images) so the opaque content never leaks the referrer to an external
+        // host on any subresource it loads, not just the HTML document.
+        if (\ExeLearning\Service\IframeSandbox::MODE_SECURE === $this->iframeMode) {
+            $headers->addHeaderLine('Referrer-Policy', 'no-referrer');
+        }
+
         // For HTML content, add strict Content-Security-Policy
         if (strpos($mimeType, 'text/html') !== false) {
             // CSP that:
@@ -200,9 +207,6 @@ class ContentController extends AbstractActionController
             }
             $headers->addHeaderLine('Content-Security-Policy', implode('; ', $directives));
 
-            // Referrer policy - don't leak info to external sites
-            $headers->addHeaderLine('Referrer-Policy', 'same-origin');
-
             // Permissions policy - disable dangerous features
             $headers->addHeaderLine(
                 'Permissions-Policy',
@@ -222,7 +226,6 @@ class ContentController extends AbstractActionController
                 "frame-ancestors 'self'",
                 'sandbox',
             ]));
-            $headers->addHeaderLine('Referrer-Policy', 'same-origin');
         }
     }
 
@@ -269,8 +272,8 @@ class ContentController extends AbstractActionController
      * In secure mode the content runs opaque, so cross-origin players (YouTube,
      * Vimeo, …) and PDFs render blank. The shim replaces each whitelisted/PDF iframe
      * with a placeholder and reports its geometry to the parent, which overlays the
-     * real player inline (see asset/js/exe-embed-shim.js + exe-embed-relay.js). The
-     * whitelist is inlined as window.__exeEmbedWhitelist. No-op in legacy mode.
+     * real player inline (see asset/js/exe-embed-shim.js + exe-embed-relay.js).
+     * No-op in legacy mode.
      */
     protected function injectEmbedShim(string $html): string
     {
@@ -284,8 +287,7 @@ class ContentController extends AbstractActionController
             return $html;
         }
 
-        $whitelist = json_encode(\ExeLearning\Service\IframeSandbox::embedWhitelist());
-        $script = '<script id="exelearning-embed-shim">window.__exeEmbedWhitelist=' . $whitelist . ';' . $shim . '</script>';
+        $script = '<script id="exelearning-embed-shim">' . $shim . '</script>';
 
         if (stripos($html, '</body>') !== false) {
             return preg_replace('/<\/body>/i', $script . '</body>', $html, 1) ?? $html;
