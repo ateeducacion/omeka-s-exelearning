@@ -51,6 +51,71 @@ final class ZipSafety
     }
 
     /**
+     * Whether an archive entry is forbidden even if its path is otherwise safe.
+     *
+     * Server configuration files and PHP-capable extensions must never be
+     * extracted from user-controlled archives because they can become executable
+     * on some Apache/PHP deployments when direct access is possible. This is a
+     * defense-in-depth deny-list on top of isUnsafeEntry(); a single forbidden
+     * entry rejects the whole archive.
+     *
+     * Trailing dots and whitespace are stripped first because some Windows/IIS
+     * stacks ignore them (so "shell.php." or "shell.php " can still execute).
+     * PHP-capable extensions are rejected in any position of the name (e.g.
+     * "shell.php.txt"), since Apache mod_mime with AddHandler executes a file
+     * whenever ".php" appears among its extensions; the remaining
+     * server-executable extensions are only matched as the final extension to
+     * avoid false positives on legitimate assets such as "pl.png" or "py.svg".
+     */
+    public static function isForbiddenEntry(string $name): bool
+    {
+        // Normalize separators and reduce to the basename for comparison.
+        $normalized = str_replace('\\', '/', $name);
+        $slash = strrpos($normalized, '/');
+        $basename = $slash === false ? $normalized : substr($normalized, $slash + 1);
+        $lower = strtolower($basename);
+        // Strip trailing dots/whitespace that some servers ignore.
+        $stripped = rtrim($lower, " \t\n\r\0\x0B.");
+
+        // Server-configuration files that must never be extracted.
+        $forbiddenBasenames = [
+            '.htaccess',
+            '.htpasswd',
+            '.user.ini',
+            'php.ini',
+            'web.config',
+        ];
+        if (in_array($stripped, $forbiddenBasenames, true)) {
+            return true;
+        }
+
+        // PHP-capable extensions are dangerous in any position of the name.
+        $phpFamily = [
+            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'shtml',
+        ];
+        foreach (explode('.', $stripped) as $part) {
+            if (in_array(trim($part), $phpFamily, true)) {
+                return true;
+            }
+        }
+
+        // Other server-executable extensions are matched as the final extension only.
+        $finalExtensions = array_merge(
+            $phpFamily,
+            ['cgi', 'pl', 'py', 'asp', 'aspx', 'jsp', 'jspx']
+        );
+        $dot = strrpos($stripped, '.');
+        if ($dot !== false) {
+            $extension = substr($stripped, $dot + 1);
+            if (in_array($extension, $finalExtensions, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Open a ZIP file and extract it safely into $destDir.
      *
      * @throws \RuntimeException on an unreadable archive or any unsafe entry.
@@ -92,7 +157,8 @@ final class ZipSafety
             throw new \RuntimeException('Could not create the extraction directory.');
         }
 
-        $totalBytes = 0;
+        // First pass: validate every entry before writing anything, so a forbidden
+        // or unsafe entry rejects the whole archive atomically (no partial extraction).
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $stat = $zip->statIndex($i);
             if ($stat === false) {
@@ -102,11 +168,27 @@ final class ZipSafety
             if (self::isUnsafeEntry($name)) {
                 throw new \RuntimeException('Refused unsafe archive entry: ' . $name);
             }
+            if (self::isForbiddenEntry($name)) {
+                throw new \RuntimeException('Refused forbidden archive entry: ' . $name);
+            }
 
             $target = $destReal . '/' . ltrim(str_replace('\\', '/', $name), '/');
             if ($target !== $destReal && strpos($target, $destReal . '/') !== 0) {
                 throw new \RuntimeException('Refused path traversal in archive entry: ' . $name);
             }
+        }
+
+        // Second pass: every entry has been validated, now write them to disk. The
+        // zip-bomb byte cap stays here because it must be measured on the real
+        // decompressed bytes, not the attacker-controlled declared sizes.
+        $totalBytes = 0;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            if ($stat === false) {
+                continue;
+            }
+            $name = (string) $stat['name'];
+            $target = $destReal . '/' . ltrim(str_replace('\\', '/', $name), '/');
 
             if (substr($name, -1) === '/') {
                 self::ensureDir($target);
