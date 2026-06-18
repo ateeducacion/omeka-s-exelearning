@@ -124,7 +124,14 @@ class ElpFileService
 
         $extractPath = $this->basePath . '/' . $hash;
         $this->log('info', sprintf('Extracting to: %s', $extractPath));
-        $this->extractZip($filePath, $extractPath);
+        try {
+            $this->extractZip($filePath, $extractPath);
+        } catch (\Throwable $e) {
+            // Remove any partially extracted files so a rejected upload leaves no
+            // orphaned directory behind.
+            $this->deleteDirectory($extractPath);
+            throw $e;
+        }
 
         $result = $this->finalizeExtraction($media, $extractPath, $hash);
 
