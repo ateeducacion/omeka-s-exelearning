@@ -253,10 +253,7 @@ class Module extends AbstractModule
 
             // Pass the relative content path; JS constructs the full URL from
             // window.location so the playground SW scope prefix is always included.
-            $contentPath = '/exelearning/content/' . $hash . '/index.html';
-            if (!$this->isTeacherModeVisible($media)) {
-                $contentPath .= '?teacher_mode_visible=0';
-            }
+            $contentPath = $this->buildContentPath($hash, $this->isTeacherViewer(), $media);
 
             echo $view->partial('exelearning/public/item-show', [
                 'media' => $media,
@@ -306,10 +303,7 @@ class Module extends AbstractModule
 
         // Pass the relative content path; JS constructs the full URL from
         // window.location so the playground SW scope prefix is always included.
-        $contentPath = '/exelearning/content/' . $hash . '/index.html';
-        if (!$this->isTeacherModeVisible($media)) {
-            $contentPath .= '?teacher_mode_visible=0';
-        }
+        $contentPath = $this->buildContentPath($hash, $this->isTeacherViewer(), $media);
 
         echo $view->partial('exelearning/admin/media-show', [
             'media' => $media,
@@ -352,9 +346,9 @@ class Module extends AbstractModule
         );
 
         // Robust injection of Teacher Mode setting into admin media edit form.
-        $label = $view->escapeJs($view->translate('Show Teacher Mode toggler'));
-        $visibleLabel = $view->escapeJs($view->translate('Visible in inserted resource'));
-        $help = $view->escapeJs($view->translate('If disabled, the Teacher Mode toggler is hidden in the embedded eXeLearning content.'));
+        $label = $view->escapeJs($view->translate('Teacher Mode'));
+        $visibleLabel = $view->escapeJs($view->translate('Let teachers reveal teacher-only content'));
+        $help = $view->escapeJs($view->translate('eXeLearning content hides teacher-only material by default. When enabled, teachers (users who can edit this media) see it revealed automatically; everyone else sees the student view.'));
         $apiBase = $basePath . '/api/exelearning';
         $view->headScript()->appendScript(<<<JS
 (function() {
@@ -706,7 +700,11 @@ JS
     }
 
     /**
-     * Check if teacher mode toggler should be visible for a media resource.
+     * Check whether teachers may reveal teacher-only content for this media.
+     *
+     * eXeLearning exports hide teacher content by default; it is revealed via
+     * the ?exe-teacher=1 URL parameter. This per-media setting controls whether
+     * the module is allowed to add that parameter for teacher viewers.
      */
     protected function isTeacherModeVisible($media): bool
     {
@@ -717,6 +715,37 @@ JS
 
         $value = $data['exelearning_teacher_mode_visible'];
         return !in_array((string) $value, ['0', 'false', 'no'], true);
+    }
+
+    /**
+     * Whether the current viewer is a teacher (allowed to update media).
+     *
+     * @codeCoverageIgnore Thin wrapper over Omeka's ACL service.
+     */
+    protected function isTeacherViewer(): bool
+    {
+        try {
+            $acl = $this->getServiceLocator()->get('Omeka\Acl');
+            return (bool) $acl->userIsAllowed('Omeka\Entity\Media', 'update');
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Build the relative content path for a media, revealing teacher-only
+     * content via ?exe-teacher=1 only when the viewer is a teacher AND the
+     * per-media setting allows it. Otherwise the default (student) view is
+     * served with no parameter.
+     */
+    protected function buildContentPath(string $hash, bool $isTeacher, $media): string
+    {
+        $contentPath = '/exelearning/content/' . $hash . '/index.html';
+        if ($isTeacher && $this->isTeacherModeVisible($media)) {
+            $contentPath .= '?exe-teacher=1';
+        }
+
+        return $contentPath;
     }
 
     protected function isExeLearningFile($media): bool

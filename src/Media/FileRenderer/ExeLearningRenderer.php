@@ -65,10 +65,7 @@ class ExeLearningRenderer implements RendererInterface
 
         // Relative path; JS constructs the full URL from window.location so the
         // playground SW scope prefix is always included (PHP cannot see it).
-        $contentPath = '/exelearning/content/' . $hash . '/index.html';
-        if (!$this->isTeacherModeVisible($media)) {
-            $contentPath .= '?teacher_mode_visible=0';
-        }
+        $contentPath = $this->buildContentPath($hash, $this->isTeacherViewer($view), $media);
 
         // Load assets
         $view->headLink()->appendStylesheet(
@@ -209,7 +206,11 @@ class ExeLearningRenderer implements RendererInterface
     }
 
     /**
-     * Determine whether teacher mode toggler should be visible.
+     * Whether teachers may reveal teacher-only content for this media.
+     *
+     * eXeLearning exports hide teacher content by default; it is revealed via
+     * the ?exe-teacher=1 URL parameter. This per-media setting controls whether
+     * the renderer is allowed to add that parameter for teacher viewers.
      */
     protected function isTeacherModeVisible(MediaRepresentation $media): bool
     {
@@ -220,6 +221,36 @@ class ExeLearningRenderer implements RendererInterface
 
         $value = $data['exelearning_teacher_mode_visible'];
         return !in_array((string) $value, ['0', 'false', 'no'], true);
+    }
+
+    /**
+     * Whether the current viewer is a teacher (allowed to update media).
+     *
+     * @codeCoverageIgnore Thin wrapper over Omeka's userIsAllowed view helper.
+     */
+    protected function isTeacherViewer(PhpRenderer $view): bool
+    {
+        try {
+            return (bool) $view->userIsAllowed('Omeka\Entity\Media', 'update');
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Build the relative content path for a media, revealing teacher-only
+     * content via ?exe-teacher=1 only when the viewer is a teacher AND the
+     * per-media setting allows it. Otherwise the default (student) view is
+     * served with no parameter.
+     */
+    protected function buildContentPath(string $hash, bool $isTeacher, MediaRepresentation $media): string
+    {
+        $contentPath = '/exelearning/content/' . $hash . '/index.html';
+        if ($isTeacher && $this->isTeacherModeVisible($media)) {
+            $contentPath .= '?exe-teacher=1';
+        }
+
+        return $contentPath;
     }
 
     protected function isExeLearningFile(MediaRepresentation $media): bool

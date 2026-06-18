@@ -612,4 +612,93 @@ class ExeLearningRendererTest extends TestCase
         $result = $this->callProtectedMethod($this->renderer, 'isTeacherModeVisible', [$media]);
         $this->assertTrue($result);
     }
+
+    // =========================================================================
+    // buildContentPath() tests
+    //
+    // eXeLearning exports hide teacher content by default and reveal it via
+    // ?exe-teacher=1. The module must only add that parameter when the viewer
+    // is a teacher AND the per-media setting allows it.
+    // =========================================================================
+
+    private const HASH = 'abc123def456789012345678901234567890abcd';
+
+    public function testBuildContentPathAppendsTeacherParamWhenTeacherAndSettingAllows(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '1']
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, true, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html?exe-teacher=1', $path);
+    }
+
+    public function testBuildContentPathAppendsTeacherParamWhenTeacherAndSettingUnset(): void
+    {
+        // Setting unset defaults to "teachers may reveal".
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            []
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, true, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html?exe-teacher=1', $path);
+    }
+
+    public function testBuildContentPathOmitsTeacherParamWhenTeacherButSettingDenies(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '0']
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, true, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html', $path);
+        $this->assertStringNotContainsString('exe-teacher', $path);
+    }
+
+    public function testBuildContentPathOmitsTeacherParamForNonTeacherWhenSettingAllows(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '1']
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, false, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html', $path);
+        $this->assertStringNotContainsString('exe-teacher', $path);
+    }
+
+    public function testBuildContentPathOmitsTeacherParamForNonTeacherWhenSettingDenies(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '0']
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, false, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html', $path);
+        $this->assertStringNotContainsString('exe-teacher', $path);
+    }
 }

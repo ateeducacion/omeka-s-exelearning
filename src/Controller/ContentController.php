@@ -104,10 +104,6 @@ class ContentController extends AbstractActionController
         $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $mimeType = $this->mimeTypes[$extension] ?? 'application/octet-stream';
 
-        $teacherModeVisibleParam = strtolower((string) $this->params()->fromQuery('teacher_mode_visible', '1'));
-        $teacherModeVisible = !in_array($teacherModeVisibleParam, ['0', 'false', 'no'], true);
-
-
         // Create response
         $response = new HttpResponse();
         $response->setStatusCode(200);
@@ -126,10 +122,6 @@ class ContentController extends AbstractActionController
         $content = file_get_contents($fullPath);
         if ($content === false) {
             return $this->notFound('File not found');
-        }
-
-        if (strpos($mimeType, 'text/html') !== false && !$teacherModeVisible) {
-            $content = $this->injectTeacherModeCss($content);
         }
 
         $headers->addHeaderLine('Content-Length', (string) strlen($content));
@@ -220,23 +212,6 @@ class ContentController extends AbstractActionController
      * @param string $path
      * @return string|null Sanitized path or null if invalid
      */
-
-
-    /**
-     * Inject CSS to hide teacher mode toggler inside eXeLearning content.
-     */
-    protected function injectTeacherModeCss(string $html): string
-    {
-        $css = '#teacher-mode-toggler-wrapper { visibility: hidden !important; }';
-        $styleTag = '<style id="exelearning-hide-teacher-mode">' . $css . '</style>';
-
-        if (stripos($html, '</head>') !== false) {
-            return preg_replace('/<\/head>/i', $styleTag . '</head>', $html, 1) ?? $html;
-        }
-
-        return $styleTag . $html;
-    }
-
     protected function sanitizePath(string $path): ?string
     {
         // Decode URL encoding
