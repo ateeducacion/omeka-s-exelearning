@@ -65,7 +65,7 @@ class ExeLearningRenderer implements RendererInterface
 
         // Relative path; JS constructs the full URL from window.location so the
         // playground SW scope prefix is always included (PHP cannot see it).
-        $contentPath = $this->buildContentPath($hash, $this->isTeacherViewer($view), $media);
+        $contentPath = $this->buildContentPath($hash, $media);
 
         // Load assets
         $view->headLink()->appendStylesheet(
@@ -224,29 +224,15 @@ class ExeLearningRenderer implements RendererInterface
     }
 
     /**
-     * Whether the current viewer is a teacher (allowed to update media).
-     *
-     * @codeCoverageIgnore Thin wrapper over Omeka's userIsAllowed view helper.
+     * Build the relative content path for a media. The per-media "Show teacher layer
+     * selector" setting alone controls it: when on, the package's ?exe-teacher=1
+     * parameter is appended so the teacher-layer selector is available to every viewer;
+     * otherwise the default (student) view is served with no parameter.
      */
-    protected function isTeacherViewer(PhpRenderer $view): bool
-    {
-        try {
-            return (bool) $view->userIsAllowed('Omeka\Entity\Media', 'update');
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
-    /**
-     * Build the relative content path for a media, revealing teacher-only
-     * content via ?exe-teacher=1 only when the viewer is a teacher AND the
-     * per-media setting allows it. Otherwise the default (student) view is
-     * served with no parameter.
-     */
-    protected function buildContentPath(string $hash, bool $isTeacher, MediaRepresentation $media): string
+    protected function buildContentPath(string $hash, MediaRepresentation $media): string
     {
         $contentPath = '/exelearning/content/' . $hash . '/index.html';
-        if ($isTeacher && $this->isTeacherModeVisible($media)) {
+        if ($this->isTeacherModeVisible($media)) {
             $contentPath .= '?exe-teacher=1';
         }
 

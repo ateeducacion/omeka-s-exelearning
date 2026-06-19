@@ -253,7 +253,7 @@ class Module extends AbstractModule
 
             // Pass the relative content path; JS constructs the full URL from
             // window.location so the playground SW scope prefix is always included.
-            $contentPath = $this->buildContentPath($hash, $this->isTeacherViewer(), $media);
+            $contentPath = $this->buildContentPath($hash, $media);
 
             echo $view->partial('exelearning/public/item-show', [
                 'media' => $media,
@@ -303,7 +303,7 @@ class Module extends AbstractModule
 
         // Pass the relative content path; JS constructs the full URL from
         // window.location so the playground SW scope prefix is always included.
-        $contentPath = $this->buildContentPath($hash, $this->isTeacherViewer(), $media);
+        $contentPath = $this->buildContentPath($hash, $media);
 
         echo $view->partial('exelearning/admin/media-show', [
             'media' => $media,
@@ -347,8 +347,8 @@ class Module extends AbstractModule
 
         // Robust injection of Teacher Mode setting into admin media edit form.
         $label = $view->escapeJs($view->translate('Teacher Mode'));
-        $visibleLabel = $view->escapeJs($view->translate('Let teachers reveal teacher-only content'));
-        $help = $view->escapeJs($view->translate('eXeLearning content hides teacher-only material by default. When enabled, teachers (users who can edit this media) see it revealed automatically; everyone else sees the student view.'));
+        $visibleLabel = $view->escapeJs($view->translate('Show teacher layer selector'));
+        $help = $view->escapeJs($view->translate('If disabled, the teacher layer selector is hidden in the embedded eXeLearning content.'));
         $apiBase = $basePath . '/api/exelearning';
         $view->headScript()->appendScript(<<<JS
 (function() {
@@ -718,30 +718,15 @@ JS
     }
 
     /**
-     * Whether the current viewer is a teacher (allowed to update media).
-     *
-     * @codeCoverageIgnore Thin wrapper over Omeka's ACL service.
+     * Build the relative content path for a media. The per-media "Show teacher layer
+     * selector" setting alone controls it: when on, the package's ?exe-teacher=1
+     * parameter is appended so the teacher-layer selector is available to every viewer;
+     * otherwise the default (student) view is served with no parameter.
      */
-    protected function isTeacherViewer(): bool
-    {
-        try {
-            $acl = $this->getServiceLocator()->get('Omeka\Acl');
-            return (bool) $acl->userIsAllowed('Omeka\Entity\Media', 'update');
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
-    /**
-     * Build the relative content path for a media, revealing teacher-only
-     * content via ?exe-teacher=1 only when the viewer is a teacher AND the
-     * per-media setting allows it. Otherwise the default (student) view is
-     * served with no parameter.
-     */
-    protected function buildContentPath(string $hash, bool $isTeacher, $media): string
+    protected function buildContentPath(string $hash, $media): string
     {
         $contentPath = '/exelearning/content/' . $hash . '/index.html';
-        if ($isTeacher && $this->isTeacherModeVisible($media)) {
+        if ($this->isTeacherModeVisible($media)) {
             $contentPath .= '?exe-teacher=1';
         }
 
