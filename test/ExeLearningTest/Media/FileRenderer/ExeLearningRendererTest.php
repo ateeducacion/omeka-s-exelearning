@@ -657,4 +657,62 @@ class ExeLearningRendererTest extends TestCase
         $result = $this->callProtectedMethod($this->renderer, 'isTeacherModeVisible', [$media]);
         $this->assertTrue($result);
     }
+
+    // =========================================================================
+    // buildContentPath() tests
+    //
+    // eXeLearning exports hide teacher content by default and expose a selector to
+    // show it via ?exe-teacher=1. The module adds that parameter (for every viewer)
+    // whenever the per-media "Show teacher layer selector" setting allows it.
+    // =========================================================================
+
+    private const HASH = 'abc123def456789012345678901234567890abcd';
+
+    public function testBuildContentPathAppendsTeacherParamWhenSettingAllows(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '1']
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html?exe-teacher=1', $path);
+    }
+
+    public function testBuildContentPathOmitsTeacherParamWhenSettingUnset(): void
+    {
+        // Setting unset defaults to "selector not available" (opt-in, aligned with #1772).
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            []
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html', $path);
+        $this->assertStringNotContainsString('exe-teacher', $path);
+    }
+
+    public function testBuildContentPathOmitsTeacherParamWhenSettingDenies(): void
+    {
+        $media = new MediaRepresentation(
+            'http://example.com/file.elpx',
+            'Test',
+            'test.elpx',
+            1,
+            ['exelearning_teacher_mode_visible' => '0']
+        );
+
+        $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, $media]);
+
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html', $path);
+        $this->assertStringNotContainsString('exe-teacher', $path);
+    }
 }

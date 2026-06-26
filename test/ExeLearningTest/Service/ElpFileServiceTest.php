@@ -524,7 +524,7 @@ class ElpFileServiceTest extends TestCase
     // isTeacherModeVisible() tests
     // =========================================================================
 
-    public function testIsTeacherModeVisibleReturnsTrueWhenNotSet(): void
+    public function testIsTeacherModeVisibleReturnsFalseWhenNotSet(): void
     {
         $media = new MediaRepresentation(
             'http://example.com/file.elpx',
@@ -534,7 +534,7 @@ class ElpFileServiceTest extends TestCase
             []
         );
 
-        $this->assertTrue($this->service->isTeacherModeVisible($media));
+        $this->assertFalse($this->service->isTeacherModeVisible($media));
     }
 
     public function testIsTeacherModeVisibleReturnsFalseForZero(): void
