@@ -351,7 +351,7 @@ class ElpFileService
     {
         $data = $media->mediaData();
         if (!isset($data['exelearning_teacher_mode_visible'])) {
-            return true;
+            return false;
         }
 
         $value = $data['exelearning_teacher_mode_visible'];

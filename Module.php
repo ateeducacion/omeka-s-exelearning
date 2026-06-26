@@ -418,13 +418,13 @@ class Module extends AbstractModule
                 if (!data || !data.success || !isExeFilename(data.filename)) {
                     return;
                 }
-                injectField(data.teacherModeVisible !== false);
+                injectField(data.teacherModeVisible === true);
             })
             .catch(function() {
                 // Fallback: use current page title as heuristic.
                 var title = document.querySelector('h1 .title');
                 if (title && isExeFilename(title.textContent || '')) {
-                    injectField(true);
+                    injectField(false);
                 }
             });
     }
@@ -710,7 +710,7 @@ JS
     {
         $data = $media->mediaData();
         if (!isset($data['exelearning_teacher_mode_visible'])) {
-            return true;
+            return false;
         }
 
         $value = $data['exelearning_teacher_mode_visible'];

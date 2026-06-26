@@ -638,9 +638,9 @@ class ExeLearningRendererTest extends TestCase
         $this->assertSame('/exelearning/content/' . self::HASH . '/index.html?exe-teacher=1', $path);
     }
 
-    public function testBuildContentPathAppendsTeacherParamWhenSettingUnset(): void
+    public function testBuildContentPathOmitsTeacherParamWhenSettingUnset(): void
     {
-        // Setting unset defaults to "selector available".
+        // Setting unset defaults to "selector not available" (opt-in, aligned with #1772).
         $media = new MediaRepresentation(
             'http://example.com/file.elpx',
             'Test',
@@ -651,7 +651,8 @@ class ExeLearningRendererTest extends TestCase
 
         $path = $this->callProtectedMethod($this->renderer, 'buildContentPath', [self::HASH, $media]);
 
-        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html?exe-teacher=1', $path);
+        $this->assertSame('/exelearning/content/' . self::HASH . '/index.html', $path);
+        $this->assertStringNotContainsString('exe-teacher', $path);
     }
 
     public function testBuildContentPathOmitsTeacherParamWhenSettingDenies(): void

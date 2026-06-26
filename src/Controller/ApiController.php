@@ -279,7 +279,7 @@ class ApiController extends AbstractActionController
             return $this->errorResponse(403, 'Forbidden');
         }
 
-        $rawValue = $request->getPost('teacher_mode_visible', '1');
+        $rawValue = $request->getPost('teacher_mode_visible', '0');
         $visible = !in_array(strtolower((string) $rawValue), ['0', 'false', 'no'], true);
 
         try {
