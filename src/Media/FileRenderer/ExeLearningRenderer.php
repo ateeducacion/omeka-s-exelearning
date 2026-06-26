@@ -65,10 +65,7 @@ class ExeLearningRenderer implements RendererInterface
 
         // Relative path; JS constructs the full URL from window.location so the
         // playground SW scope prefix is always included (PHP cannot see it).
-        $contentPath = '/exelearning/content/' . $hash . '/index.html';
-        if (!$this->isTeacherModeVisible($media)) {
-            $contentPath .= '?teacher_mode_visible=0';
-        }
+        $contentPath = $this->buildContentPath($hash, $media);
 
         // Load assets
         $view->headLink()->appendStylesheet(
@@ -209,17 +206,37 @@ class ExeLearningRenderer implements RendererInterface
     }
 
     /**
-     * Determine whether teacher mode toggler should be visible.
+     * Whether teachers may reveal teacher-only content for this media.
+     *
+     * eXeLearning exports hide teacher content by default; it is revealed via
+     * the ?exe-teacher=1 URL parameter. This per-media setting controls whether
+     * the renderer is allowed to add that parameter for teacher viewers.
      */
     protected function isTeacherModeVisible(MediaRepresentation $media): bool
     {
         $data = $media->mediaData();
         if (!isset($data['exelearning_teacher_mode_visible'])) {
-            return true;
+            return false;
         }
 
         $value = $data['exelearning_teacher_mode_visible'];
         return !in_array((string) $value, ['0', 'false', 'no'], true);
+    }
+
+    /**
+     * Build the relative content path for a media. The per-media "Show teacher layer
+     * selector" setting alone controls it: when on, the package's ?exe-teacher=1
+     * parameter is appended so the teacher-layer selector is available to every viewer;
+     * otherwise the default (student) view is served with no parameter.
+     */
+    protected function buildContentPath(string $hash, MediaRepresentation $media): string
+    {
+        $contentPath = '/exelearning/content/' . $hash . '/index.html';
+        if ($this->isTeacherModeVisible($media)) {
+            $contentPath .= '?exe-teacher=1';
+        }
+
+        return $contentPath;
     }
 
     protected function isExeLearningFile(MediaRepresentation $media): bool
