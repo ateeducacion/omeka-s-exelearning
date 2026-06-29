@@ -162,4 +162,40 @@ final class IframeSandbox
         $view->headScript()->appendScript('window.ExeEmbedRelayConfig=' . $config . ';');
         $view->headScript()->appendFile($view->assetUrl('js/exe-embed-relay.js', 'ExeLearning'));
     }
+
+    /**
+     * Enqueue the parent-side external-media host for the interactive-video iDevice
+     * (secure mode only). The opaque content cannot run a nested YouTube/Vimeo player,
+     * so eXeLearning's interactive-video iDevice drives playback through
+     * window.exeMediaBridge (the child runtime baked into the package by eXeLearning);
+     * this host completes that capability handshake (window identity + per-view nonce +
+     * a transferred MessageChannel port) and plays the real provider video in an
+     * accessible modal, controlled by RAW postMessage (no YouTube IFrame API / Vimeo SDK
+     * loaded on this page). Separate message namespace ('exe-media') from the embed relay
+     * ('exe-embed'), so both coexist. No-op in legacy mode. Mirrors mod_exelearning's
+     * view.php wiring (DEC-0067).
+     *
+     * @param \Laminas\View\Renderer\PhpRenderer $view
+     * @param mixed $mode The iframe sandbox mode (secure|legacy).
+     */
+    public static function enqueueMediaHost(\Laminas\View\Renderer\PhpRenderer $view, $mode): void
+    {
+        if (self::normalizeMode($mode) !== self::MODE_SECURE) {
+            return;
+        }
+        // Policy must load before the host (the host reads window.exeMediaPolicy at eval).
+        $view->headScript()->appendFile($view->assetUrl('js/exe-media-policy.js', 'ExeLearning'));
+        $view->headScript()->appendFile($view->assetUrl('js/exe-media-host.js', 'ExeLearning'));
+        // Attach the host to every content iframe on the page (promoted players excluded).
+        // attach() is harmless on non-eXe iframes (no hello arrives), so scanning mirrors
+        // the relay's source-discovery without needing a fixed iframe id.
+        $view->headScript()->appendScript(
+            '(function(){function a(){if(!window.exeMediaHost)return;'
+            . 'var f=document.getElementsByTagName("iframe");for(var i=0;i<f.length;i++){'
+            . 'if(f[i].getAttribute("data-exe-embed-player"))continue;'
+            . 'if(f[i].getAttribute("data-exe-media-attached"))continue;'
+            . 'f[i].setAttribute("data-exe-media-attached","1");window.exeMediaHost.attach(f[i],{});}}'
+            . 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",a);}else{a();}})();'
+        );
+    }
 }

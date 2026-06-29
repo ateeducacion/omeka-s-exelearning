@@ -179,6 +179,35 @@
 		return true;
 	}
 
+	// Provider templates for the id-only channel (DEC-0067): the parent rebuilds the canonical
+	// embed URL from {provider, objectId} reported by the shim, re-checking the object id
+	// against a strict per-provider regex so it cannot carry a path/query/fragment and escape
+	// the template (e.g. '../../x' or 'a/b?c'). The reconstructed URL still runs through
+	// validate() (structural invariant / strict whitelist), so this narrows the surface for
+	// recognised providers; it is not, by itself, the trust gate.
+	var PROVIDER_TEMPLATES = {
+		youtube: { re: /^[A-Za-z0-9_-]{6,}$/, build: function ( id ) { return 'https://www.youtube-nocookie.com/embed/' + id; } },
+		vimeo: { re: /^[0-9]+$/, build: function ( id ) { return 'https://player.vimeo.com/video/' + id; } },
+		dailymotion: { re: /^[A-Za-z0-9]{5,}$/, build: function ( id ) { return 'https://www.dailymotion.com/embed/video/' + id; } },
+		'mediateca-madrid': { re: /^[A-Za-z0-9]{8,}$/, build: function ( id ) { return 'https://mediateca.educa.madrid.org/video/' + id + '/fs'; } }
+	};
+
+	/**
+	 * Rebuild the canonical embed URL for a recognised provider from its object id, or null
+	 * if the provider is unknown or the id is not the exact shape the template expects.
+	 *
+	 * @param {string} provider The provider key reported by the shim.
+	 * @param {string} objectId The provider object id reported by the shim.
+	 * @return {?string} The canonical embed URL, or null.
+	 */
+	function reconstructProvider( provider, objectId ) {
+		var t = PROVIDER_TEMPLATES[ provider ];
+		if ( ! t || typeof objectId !== 'string' || ! t.re.test( objectId ) ) {
+			return null;
+		}
+		return t.build( objectId );
+	}
+
 	/**
 	 * Validate an embed URL. Returns { url, kind ('video'|'pdf'), sameorigin? } or null.
 	 *
@@ -374,7 +403,18 @@
 				if ( ! isFinite( embed.x ) || ! isFinite( embed.y ) || ! isFinite( embed.w ) || ! isFinite( embed.h ) ) {
 					return;
 				}
-				var result = validate( embed.url, contentSrc, { strict: strict, whitelist: whitelist } );
+				// id-only channel (DEC-0067): for recognised providers the shim reports
+				// {provider, objectId} and the parent rebuilds the canonical URL from a
+				// fixed template (the author URL never crosses for these). Unknown embeds
+				// keep the URL path. Either way validate() runs the structural invariant.
+				var raw = embed.url;
+				if ( embed.provider && embed.objectId ) {
+					raw = reconstructProvider( embed.provider, embed.objectId );
+					if ( ! raw ) {
+						return;
+					}
+				}
+				var result = validate( raw, contentSrc, { strict: strict, whitelist: whitelist } );
 				if ( ! result ) {
 					return;
 				}
@@ -485,6 +525,7 @@
 		normalizeHost: normalizeHost,
 		isRelatedToLms: isRelatedToLms,
 		isCrossOriginHttps: isCrossOriginHttps,
+		reconstructProvider: reconstructProvider,
 		validate: validate,
 		makePlayer: makePlayer,
 		createRelay: createRelay
