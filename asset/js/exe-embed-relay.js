@@ -274,10 +274,11 @@
 	 * Create a SANDBOXED player iframe for a validated embed. The video player gets
 	 * allow-same-origin so the cross-origin provider keeps its own origin and renders,
 	 * while NO allow-top-navigation/allow-modals stops a hostile embed from redirecting
-	 * the host tab or spamming dialogs. The PDF player omits allow-scripts (so any PDF JS
-	 * cannot run) but keeps allow-same-origin so the browser viewer renders.
+	 * the host tab or spamming dialogs. A same-origin package PDF is left unsandboxed (the
+	 * browser PDF viewer needs it); a CROSS-ORIGIN PDF is sandboxed with allow-same-origin
+	 * only (no allow-scripts, no allow-top-navigation) so it cannot redirect the host tab.
 	 *
-	 * @param {Object} result { url, kind } from validate().
+	 * @param {Object} result { url, kind, sameorigin? } from validate().
 	 * @return {HTMLIFrameElement} The configured player iframe.
 	 */
 	function makePlayer( result ) {
@@ -290,14 +291,20 @@
 			frame.setAttribute( 'allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write' );
 			frame.setAttribute( 'allowfullscreen', '' );
 			frame.setAttribute( 'referrerpolicy', 'strict-origin-when-cross-origin' );
+		} else if ( result.sameorigin ) {
+			// Same-origin PDF that belongs to THIS package: served application/pdf + nosniff
+			// (never executable HTML), left unsandboxed so the browser's built-in PDF viewer
+			// renders it (it shows the broken-document icon inside a sandbox). The load guard
+			// still removes it if it redirects to the host origin.
+			frame.setAttribute( 'allow', 'fullscreen' );
+			frame.setAttribute( 'referrerpolicy', 'no-referrer' );
 		} else {
-			// The browser's built-in PDF viewer does NOT run inside a sandboxed iframe
-			// (it renders the broken-document icon), so the PDF player is left unsandboxed
-			// -- unchanged from before DEC-0061, where PDFs were already "any https .pdf".
-			// A cross-origin PDF is isolated by SOP; the same-origin path is restricted to
-			// this package's own files; the load guard below still removes a PDF that
-			// redirects to the host origin. Residual (documented): a server that serves
-			// HTML at a .pdf path could run scripts here -- pre-existing and low.
+			// Cross-origin PDF whose URL comes from the untrusted package. A server can serve
+			// scripted HTML at a ".pdf" path; UNSANDBOXED, that frame could top-navigate the
+			// host tab to a phishing page. Sandbox it WITHOUT allow-top-navigation/allow-scripts;
+			// allow-same-origin keeps the provider's own origin (SOP-isolated from the host).
+			// Trade-off: a genuine cross-origin PDF may show the broken-document icon. (audit M-3)
+			frame.setAttribute( 'sandbox', 'allow-same-origin' );
 			frame.setAttribute( 'allow', 'fullscreen' );
 			frame.setAttribute( 'referrerpolicy', 'no-referrer' );
 		}

@@ -150,8 +150,17 @@ describe('exe_embed_relay makePlayer() — sandboxed players', () => {
         expect(frame.getAttribute('referrerpolicy')).toBe('strict-origin-when-cross-origin');
     });
 
-    it('PDF player is NOT sandboxed (the browser PDF viewer fails inside a sandbox)', () => {
+    it('cross-origin PDF player is sandboxed allow-same-origin (no scripts/top-nav)', () => {
         const frame = relay.makePlayer({ url: 'https://files.test/manual.pdf', kind: 'pdf' });
+        const sb = frame.getAttribute('sandbox');
+        expect(sb).toBe('allow-same-origin'); // cannot top-navigate the host tab to phishing
+        expect(sb).not.toContain('allow-scripts');
+        expect(sb).not.toContain('allow-top-navigation');
+        expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer');
+    });
+
+    it('same-origin package PDF player is unsandboxed (the browser PDF viewer needs it)', () => {
+        const frame = relay.makePlayer({ url: 'https://files.test/manual.pdf', kind: 'pdf', sameorigin: true });
         expect(frame.hasAttribute('sandbox')).toBe(false);
         expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer');
     });
