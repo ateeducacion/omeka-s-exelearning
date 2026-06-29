@@ -145,7 +145,7 @@ class ExeLearningRendererTest extends TestCase
         $this->assertSame('secure', $config['iframe_mode']);
     }
 
-    public function testGetConfigReadsLegacyIframeMode(): void
+    public function testGetConfigIgnoresLegacyIframeMode(): void
     {
         $mockSetting = new class {
             public function __invoke($key, $default = null)
@@ -182,7 +182,9 @@ class ExeLearningRendererTest extends TestCase
 
         $config = $this->callProtectedMethod($this->renderer, 'getConfig', [$view]);
 
-        $this->assertSame('legacy', $config['iframe_mode']);
+        // The same-origin mode was removed: a leftover 'legacy' setting is ignored and the
+        // renderer still resolves to secure (no silent downgrade).
+        $this->assertSame('secure', $config['iframe_mode']);
     }
 
     // =========================================================================

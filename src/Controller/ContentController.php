@@ -163,25 +163,34 @@ class ContentController extends AbstractActionController
 
         // For HTML content, add strict Content-Security-Policy
         if (strpos($mimeType, 'text/html') !== false) {
-            // CSP that:
-            // - Allows inline styles and scripts (needed for eXeLearning content)
-            // - Restricts where content can be loaded from
-            // - Prevents the content from framing other sites
-            // - Allows images/media from same origin and data URIs
+            // CSP that allows the inline/eval scripts eXeLearning needs while restricting
+            // where the opaque content can load from. The strict (default) profile blocks
+            // bare https: in script/img/media-src so the served URL cannot be exfiltrated;
+            // the compatible profile re-opens them for external author assets (weaker).
+            $compatible = \ExeLearning\Service\IframeSandbox::CSP_COMPATIBLE
+                === \ExeLearning\Service\IframeSandbox::cspProfile();
+            if ($compatible) {
+                $scriptSrc = "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:";
+                $imgSrc = "img-src 'self' data: blob: https:";
+                $mediaSrc = "media-src 'self' data: blob: https:";
+                $frameSrc = "frame-src 'self' https:";
+            } else {
+                $providers = 'https://www.youtube-nocookie.com https://player.vimeo.com '
+                    . 'https://www.dailymotion.com https://mediateca.educa.madrid.org';
+                $scriptSrc = "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+                $imgSrc = "img-src 'self' data: blob:";
+                $mediaSrc = "media-src 'self' data: blob:";
+                $frameSrc = "frame-src 'self' " . $providers;
+            }
             $directives = [
                 "default-src 'self'",
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+                $scriptSrc,
                 "style-src 'self' 'unsafe-inline'",
-                // Allow external https: images, media and framed embeds (PDFs, YouTube,
-                // Vimeo, …) so authors can include external resources. This is display
-                // only; connect-src stays 'self' so the opaque content cannot exfiltrate
-                // via fetch/XHR/beacon. (NB: third-party video players still need their
-                // own origin, which the opaque sandbox denies — those require legacy mode.)
-                "img-src 'self' data: blob: https:",
-                "media-src 'self' data: blob: https:",
+                $imgSrc,
+                $mediaSrc,
                 "font-src 'self' data:",
                 "connect-src 'self'",
-                "frame-src 'self' https:",
+                $frameSrc,
                 "frame-ancestors 'self'",
                 "form-action 'none'",
                 "base-uri 'self'",

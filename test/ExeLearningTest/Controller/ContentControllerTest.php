@@ -347,6 +347,10 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString("img-src 'self' data: blob:", $csp);
         $this->assertStringContainsString("frame-ancestors 'self'", $csp);
         $this->assertStringContainsString("form-action 'none'", $csp);
+        // Strict (default): no bare https: channels (so the served URL cannot be exfiltrated);
+        // frame-src is limited to the maintained providers.
+        $this->assertDoesNotMatchRegularExpression('~\bhttps:(?!//)~', $csp);
+        $this->assertStringContainsString('https://www.youtube-nocookie.com', $csp);
     }
 
     public function testSecureModeCspSandboxesTheDocument(): void
@@ -362,15 +366,16 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString('sandbox allow-scripts allow-popups allow-forms', $csp);
     }
 
-    public function testLegacyModeCspHasNoSandbox(): void
+    public function testLegacyModeArgIsIgnoredStillSandboxed(): void
     {
+        // The same-origin mode was removed: a 'legacy' constructor arg is ignored and the
+        // response-level CSP sandbox is still applied (no silent downgrade to same-origin).
         $controller = new ContentController($this->testBasePath, 'legacy');
         $headers = new \Laminas\Http\Headers();
         $this->callProtectedMethod($controller, 'addSecurityHeaders', [$headers, 'text/html']);
 
         $csp = $headers->get('Content-Security-Policy')->getFieldValue();
-        $this->assertStringNotContainsString('sandbox', $csp);
-        // Legacy still keeps the rest of the policy.
+        $this->assertStringContainsString('sandbox allow-scripts allow-popups allow-forms', $csp);
         $this->assertStringContainsString("default-src 'self'", $csp);
     }
 
@@ -386,30 +391,43 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString('</script></body>', $out);
     }
 
-    public function testInjectEmbedShimIsNoopInLegacyMode(): void
+    public function testInjectEmbedShimIgnoresLegacyArg(): void
     {
+        // The same-origin mode was removed: a 'legacy' constructor arg is ignored and the
+        // embed shim is still injected (the content always renders secure).
         $controller = new ContentController($this->testBasePath, 'legacy');
         $html = '<html><head></head><body><p>content</p></body></html>';
         $out = $this->callProtectedMethod($controller, 'injectEmbedShim', [$html]);
 
-        $this->assertSame($html, $out);
-        $this->assertStringNotContainsString('exelearning-embed-shim', $out);
+        $this->assertStringContainsString('exelearning-embed-shim', $out);
     }
 
-    public function testCspAllowsExternalEmbeds(): void
+    public function testCspIsStrictByDefault(): void
     {
         $headers = new \Laminas\Http\Headers();
         $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'text/html']);
 
         $csp = $headers->get('Content-Security-Policy')->getFieldValue();
-        // External https: images/video and framed embeds (PDFs, YouTube, Vimeo) are
-        // allowed so authors can include external resources.
-        $this->assertStringContainsString("img-src 'self' data: blob: https:", $csp);
-        $this->assertStringContainsString("media-src 'self' data: blob: https:", $csp);
-        $this->assertStringContainsString("frame-src 'self' https:", $csp);
-        // …but the exfiltration channel stays closed.
+        // Strict (default): no bare https: in img/media, frame-src limited to the maintained
+        // providers, connect-src closed — so the opaque content cannot exfiltrate the served URL.
+        $this->assertStringContainsString("img-src 'self' data: blob:", $csp);
+        $this->assertDoesNotMatchRegularExpression('~img-src[^;]*\bhttps:(?!//)~', $csp);
+        $this->assertStringContainsString("frame-src 'self' https://www.youtube-nocookie.com", $csp);
         $this->assertStringContainsString("connect-src 'self'", $csp);
-        $this->assertStringNotContainsString("connect-src 'self' https:", $csp);
+    }
+
+    public function testCspCompatibleProfileAllowsExternalHttps(): void
+    {
+        putenv('EXELEARNING_CSP_PROFILE=compatible');
+        try {
+            $headers = new \Laminas\Http\Headers();
+            $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'text/html']);
+            $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+            $this->assertMatchesRegularExpression('~img-src[^;]*\bhttps:(?!//)~', $csp);
+            $this->assertMatchesRegularExpression('~media-src[^;]*\bhttps:(?!//)~', $csp);
+        } finally {
+            putenv('EXELEARNING_CSP_PROFILE');
+        }
     }
 
     // =========================================================================

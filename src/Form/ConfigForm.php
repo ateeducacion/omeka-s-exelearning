@@ -32,37 +32,25 @@ class ConfigForm extends Form
             ],
         ]);
 
-        $this->add([
-            'name' => 'exelearning_iframe_mode',
-            'type' => Element\Select::class,
-            'options' => [
-                'label' => 'Preview iframe security mode', // @translate
-                'info' => 'Secure (recommended): the preview runs in an opaque-origin sandbox, so author HTML/JS cannot read the Omeka page or reach its cookies. Legacy: keeps same-origin (only needed where an opaque iframe cannot be served, e.g. the php-wasm Playground).', // @translate
-                'value_options' => [
-                    'secure' => 'Secure (opaque-origin sandbox)', // @translate
-                    'legacy' => 'Legacy (same-origin)', // @translate
-                ],
-            ],
-            'attributes' => [
-                'required' => false,
-                'value' => 'secure',
-            ],
-        ]);
+        // The same-origin "legacy" iframe mode was removed: the preview always renders in an
+        // opaque-origin sandbox. A dev-only escape hatch (the EXELEARNING_UNSAFE_LEGACY_IFRAME
+        // constant/env, never this form) restores same-origin where an opaque subframe cannot
+        // be served (the php-wasm Playground).
 
         $this->add([
             'name' => 'exelearning_embed_mode',
             'type' => Element\Select::class,
             'options' => [
                 'label' => 'External embed policy', // @translate
-                'info' => 'Open (recommended): in secure mode any cross-origin https iframe (YouTube, Vimeo, …) is promoted to this page and rendered sandboxed, so it is isolated by the same-origin policy regardless of host. Strict: only a maintained host allowlist with per-provider URL reconstruction, for deployments where even the author is not trusted. Mirrors mod_exelearning\'s embedmode setting.', // @translate
+                'info' => 'Strict (recommended): only a maintained provider allowlist (YouTube, Vimeo, Dailymotion, EducaMadrid) with per-provider URL reconstruction; use it where the author is not fully trusted. Open: any cross-origin https iframe is promoted to this page and rendered sandboxed, so it is isolated by the same-origin policy regardless of host. Mirrors mod_exelearning\'s embedmode setting.', // @translate
                 'value_options' => [
+                    'strict' => 'Strict (provider allowlist)', // @translate
                     'open' => 'Open (any cross-origin https embed)', // @translate
-                    'strict' => 'Strict (host allowlist)', // @translate
                 ],
             ],
             'attributes' => [
                 'required' => false,
-                'value' => 'open',
+                'value' => 'strict',
             ],
         ]);
 

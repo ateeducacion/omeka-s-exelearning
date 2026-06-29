@@ -34,7 +34,7 @@ final class IframeSandbox
     /**
      * Settings key that stores the external-embed policy (open|strict).
      *
-     * The value is resolved by self::embedMode(); an unset key resolves to 'open'.
+     * The value is resolved by self::embedMode(); an unset key resolves to 'strict'.
      * Mirrors mod_exelearning's canonical "embedmode" setting (DEC-0061); the Omeka
      * settings key differs only in name.
      */
@@ -50,8 +50,14 @@ final class IframeSandbox
      */
     private const SECURE_TOKENS = 'allow-scripts allow-popups allow-forms';
 
-    /** Legacy tokens: the previous same-origin behaviour, kept as an explicit opt-out. */
+    /** Legacy tokens: the previous same-origin behaviour, only via the dev-only escape hatch. */
     private const LEGACY_TOKENS = 'allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox';
+
+    /** Strict CSP profile (default): no bare https: token-exfiltration channels. */
+    public const CSP_STRICT = 'strict';
+
+    /** Compatible CSP profile: allows https: img/media/script for external author assets. */
+    public const CSP_COMPATIBLE = 'compatible';
 
     /**
      * Default host whitelist for external video embeds promoted to the parent page.
@@ -85,27 +91,64 @@ final class IframeSandbox
      */
     public static function normalizeMode($value): string
     {
-        return $value === self::MODE_LEGACY ? self::MODE_LEGACY : self::MODE_SECURE;
+        // The same-origin ConfigForm option was removed: production is always secure. The
+        // dev-only EXELEARNING_UNSAFE_LEGACY_IFRAME escape hatch (constant or env, never the
+        // ConfigForm) is the only way to restore same-origin, for environments that cannot
+        // serve an opaque subframe (the php-wasm Playground). The setting value is ignored.
+        return self::isUnsafeLegacy() ? self::MODE_LEGACY : self::MODE_SECURE;
     }
 
     /**
-     * Resolve the external-embed policy (DEC-0061). Default 'open' promotes any
-     * cross-origin https iframe (the player is sandboxed + cross-origin, so SOP
-     * isolates it from the Omeka page); 'strict' restricts to the maintained host
-     * allowlist. An unrecognised (tampered) value fails to 'strict' (toward the more
-     * restrictive), while an unset value keeps the intended 'open' default.
+     * Whether the dev-only unsafe legacy (same-origin) escape hatch is enabled. Set via the
+     * EXELEARNING_UNSAFE_LEGACY_IFRAME constant or environment variable; never exposed in the
+     * ConfigForm. Intended only for environments whose service worker cannot serve an opaque
+     * subframe. Defaults off.
      *
-     * Mirrors mod_exelearning's canonical embedmode resolver; uses a strict
-     * comparison so non-string values (arrays, objects, booleans) never warn/throw.
+     * @return bool
+     */
+    public static function isUnsafeLegacy(): bool
+    {
+        if (defined('EXELEARNING_UNSAFE_LEGACY_IFRAME') && constant('EXELEARNING_UNSAFE_LEGACY_IFRAME') === true) {
+            return true;
+        }
+        $env = getenv('EXELEARNING_UNSAFE_LEGACY_IFRAME');
+        return $env === '1' || $env === 'true';
+    }
+
+    /**
+     * Resolve the content CSP profile. 'strict' (default) blocks bare https: exfiltration
+     * channels; 'compatible' re-opens img/media/script to https: for content that loads
+     * external author assets (third-party images, a MathJax CDN) and is documented weaker.
+     * Opt in via the EXELEARNING_CSP_PROFILE env/constant; any other value fails safe to strict.
+     *
+     * @return string self::CSP_STRICT or self::CSP_COMPATIBLE
+     */
+    public static function cspProfile(): string
+    {
+        $value = false;
+        if (defined('EXELEARNING_CSP_PROFILE')) {
+            $value = constant('EXELEARNING_CSP_PROFILE');
+        } elseif (getenv('EXELEARNING_CSP_PROFILE') !== false) {
+            $value = getenv('EXELEARNING_CSP_PROFILE');
+        }
+        return $value === self::CSP_COMPATIBLE ? self::CSP_COMPATIBLE : self::CSP_STRICT;
+    }
+
+    /**
+     * Resolve the external-embed policy (DEC-0061). Default 'strict' restricts promotion to
+     * the maintained provider allowlist with canonical URL reconstruction; 'open' is an
+     * explicit opt-in that promotes any cross-origin https iframe (the player is sandboxed +
+     * cross-origin, so SOP isolates it from the Omeka page). Any unset or unrecognised value
+     * fails safe to 'strict'.
+     *
+     * Mirrors mod_exelearning's canonical embedmode resolver; uses a strict comparison so
+     * non-string values (arrays, objects, booleans) never warn/throw.
      *
      * @param mixed $value
      * @return string self::EMBED_OPEN or self::EMBED_STRICT
      */
     public static function embedMode($value = null): string
     {
-        if ($value === false || $value === null || $value === '') {
-            return self::EMBED_OPEN;
-        }
         return $value === self::EMBED_OPEN ? self::EMBED_OPEN : self::EMBED_STRICT;
     }
 

@@ -272,7 +272,7 @@ class ExeLearningRenderer implements RendererInterface
         $defaults = [
             'height' => 600,
             'iframe_mode' => IframeSandbox::MODE_SECURE,
-            'embed_mode' => IframeSandbox::EMBED_OPEN,
+            'embed_mode' => IframeSandbox::EMBED_STRICT,
         ];
 
         try {
@@ -282,8 +282,8 @@ class ExeLearningRenderer implements RendererInterface
                 'iframe_mode' => IframeSandbox::normalizeMode(
                     $setting('exelearning_iframe_mode', $defaults['iframe_mode'])
                 ),
-                // Raw setting value; IframeSandbox::embedMode() resolves it (open default).
-                'embed_mode' => $setting(IframeSandbox::EMBED_OPTION, IframeSandbox::EMBED_OPEN),
+                // Raw setting value; IframeSandbox::embedMode() resolves it (strict default).
+                'embed_mode' => $setting(IframeSandbox::EMBED_OPTION, IframeSandbox::EMBED_STRICT),
             ];
         } catch (\Throwable $e) {
             return $defaults;

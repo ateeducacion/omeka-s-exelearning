@@ -26,18 +26,24 @@ class IframeSandboxTest extends TestCase
         $this->assertStringContainsString('allow-forms', $tokens);
     }
 
-    public function testLegacyTokensKeepSameOriginAndPopupEscape(): void
+    public function testLegacyOptionIsIgnoredWithoutEscapeHatch(): void
     {
+        // The same-origin mode was removed: a 'legacy' setting is ignored (the escape-hatch
+        // constant is off by default), so the tokens stay opaque (no allow-same-origin).
+        $this->assertFalse(IframeSandbox::isUnsafeLegacy());
         $tokens = IframeSandbox::tokens(IframeSandbox::MODE_LEGACY);
-        $this->assertStringContainsString('allow-same-origin', $tokens);
-        $this->assertStringContainsString('allow-popups-to-escape-sandbox', $tokens);
+        $this->assertStringNotContainsString('allow-same-origin', $tokens);
         $this->assertStringContainsString('allow-scripts', $tokens);
-        $this->assertStringContainsString('allow-forms', $tokens);
     }
 
-    public function testNormalizeModeKeepsLegacy(): void
+    public function testNormalizeModeIsAlwaysSecureWithoutEscapeHatch(): void
     {
-        $this->assertSame(IframeSandbox::MODE_LEGACY, IframeSandbox::normalizeMode('legacy'));
+        $this->assertSame(IframeSandbox::MODE_SECURE, IframeSandbox::normalizeMode('legacy'));
+    }
+
+    public function testCspProfileDefaultsToStrict(): void
+    {
+        $this->assertSame(IframeSandbox::CSP_STRICT, IframeSandbox::cspProfile());
     }
 
     /**
@@ -71,13 +77,12 @@ class IframeSandboxTest extends TestCase
         ];
     }
 
-    public function testEmbedModeDefaultsToOpen(): void
+    public function testEmbedModeDefaultsToStrict(): void
     {
-        // An explicit 'open' value, and an unset value, both resolve to open
-        // (the structural-invariant default, DEC-0061).
+        // 'open' is an explicit opt-in; an unset value defaults to strict (DEC-0061).
         $this->assertSame(IframeSandbox::EMBED_OPEN, IframeSandbox::embedMode('open'));
-        $this->assertSame(IframeSandbox::EMBED_OPEN, IframeSandbox::embedMode(null));
-        $this->assertSame(IframeSandbox::EMBED_OPEN, IframeSandbox::embedMode());
+        $this->assertSame(IframeSandbox::EMBED_STRICT, IframeSandbox::embedMode(null));
+        $this->assertSame(IframeSandbox::EMBED_STRICT, IframeSandbox::embedMode());
     }
 
     public function testEmbedModeKeepsStrict(): void
@@ -86,9 +91,8 @@ class IframeSandboxTest extends TestCase
     }
 
     /**
-     * An unset value keeps the intended 'open' default, but any other recognised-but-
-     * not-'open' value (e.g. a tampered setting) fails safe toward the more restrictive
-     * 'strict' policy, never silently weakening to 'open'.
+     * Every value other than an explicit 'open' (including unset/tampered settings) resolves
+     * to the more restrictive 'strict' policy, so the embed gate never silently weakens.
      *
      * @dataProvider strictFallbackProvider
      * @param mixed $value
