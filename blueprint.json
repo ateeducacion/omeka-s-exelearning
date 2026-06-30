@@ -3,6 +3,9 @@
   "debug": {
     "enabled": true
   },
+  "phpConstants": {
+    "EXELEARNING_UNSAFE_LEGACY_IFRAME": true
+  },
   "landingPage": "/admin",
   "siteOptions": {
     "title": "eXeLearning Playground",
