@@ -25,11 +25,10 @@
  *
  * Config: window.ExeEmbedRelayConfig = { mode: 'open'|'strict', whitelist: [...] }.
  *
- * MIRROR of the canonical eXeLearning embedder source in mod_exelearning
- * (js/exe_embed_relay.js). Keep the validate()/makePlayer()/sync() logic identical
- * across the three embedders (mod, wp, omeka); only the export wrapper differs (this
- * one is an auto-running IIFE reading window.ExeEmbedRelayConfig).
- * tools/check-embed-sync.mjs in mod_exelearning flags drift. Part of the eXeLearning
+ * MIRROR of the canonical eXeLearning embedder source in eXe core
+ * (public/app/common/exe_embed_bridge/exe_embed_relay.js). Keep the validate()/makePlayer()/sync()
+ * logic identical to core; only the export wrapper differs (this one is an auto-running
+ * IIFE). scripts/check-embed-sync.mjs in eXe core flags drift. Part of the eXeLearning
  * embedder family (Omeka S module).
  */
 ( function () {

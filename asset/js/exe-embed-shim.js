@@ -13,10 +13,10 @@
  * mode, DEC-0061). postMessage targetOrigin is '*' because the opaque origin has no
  * stable value; the parent authenticates messages by event.source instead.
  *
- * MIRROR of the canonical eXeLearning embedder source in mod_exelearning
- * (js/exe_embed_shim.js). Keep the promote()/report() logic identical across the three
- * embedders (mod, wp, omeka); only the export wrapper differs (this one is an
- * auto-running IIFE). tools/check-embed-sync.mjs in mod_exelearning flags drift.
+ * MIRROR of the canonical eXeLearning embedder source in eXe core
+ * (public/app/common/exe_embed_bridge/exe_embed_shim.js). Keep the promote()/report()
+ * logic identical to core; only the export wrapper differs (this one is an auto-running
+ * IIFE). scripts/check-embed-sync.mjs in eXe core flags drift.
  * Part of the eXeLearning embedder family (Omeka S module).
  */
 ( function () {
