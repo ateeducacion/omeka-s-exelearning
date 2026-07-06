@@ -156,11 +156,17 @@ class PreviewController extends AbstractActionController
      * lands, this stub returns null, so every capability URL 404s (still with the
      * correct hardening headers) — the safe default.
      *
+     * Declared `protected` (not `private`) so the follow-up
+     * PreviewControllerFactory can inject a real PreviewSessionStore by
+     * subclassing/overriding this single seam, and so unit tests can exercise
+     * the serving success path without a live store — mirroring the overridable
+     * seams used by the sibling controllers.
+     *
      * @param string $previewId Validated capability UUID.
      * @param string $path      Normalized, traversal-safe manifest key.
      * @return array{bytes: string, mime: string}|null
      */
-    private function lookupPreviewFile(string $previewId, string $path): ?array
+    protected function lookupPreviewFile(string $previewId, string $path): ?array
     {
         // Intentionally unresolved until PreviewSessionStore is implemented.
         return null;
