@@ -27,7 +27,7 @@
       },
       "assets": [
         {
-          "url": "https://github.com/exelearning/exelearning/releases/download/v4.0.1/exelearning-static-v4.0.1.zip",
+          "url": "https://github.com/exelearning/exelearning/releases/download/v4.0.2/exelearning-static-v4.0.2.zip",
           "destination": "dist/static"
         }
       ]
