@@ -91,6 +91,13 @@ make package VERSION=1.2.3  # Build a .zip release
 
 Default credentials: `admin@example.com` / `PLEASE_CHANGEME`
 
+### Architecture documentation
+
+Architecture Decision Records (ADRs) and Software Design Documents (SDDs) live
+under [`docs/architecture/`](docs/architecture/README.md). Use them for
+significant design, security, storage, content-proxy, embedded-editor, or
+compatibility changes.
+
 ## Requirements
 
 - Omeka S 3.0 or higher
