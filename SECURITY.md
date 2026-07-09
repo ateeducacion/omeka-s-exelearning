@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Only the latest version of the plugin is supported with security updates. `omeka-s-ThreeDViewer` follows a rolling release model.
+Only the latest version of the module is supported with security updates. `omeka-s-exelearning` follows a rolling release model.
 
 | Version | Supported          |
 | ------- | ------------------ |
