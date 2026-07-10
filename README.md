@@ -6,7 +6,6 @@
 ![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)
 ![Downloads](https://img.shields.io/github/downloads/exelearning/omeka-s-exelearning/total)
 ![Last Commit](https://img.shields.io/github/last-commit/exelearning/omeka-s-exelearning)
-![Open Issues](https://img.shields.io/github/issues/exelearning/omeka-s-exelearning)
 
 Omeka S module for eXeLearning content management. Upload, view and edit eXeLearning `.elpx` files directly within Omeka S.
 
@@ -103,6 +102,14 @@ compatibility changes.
 
 - Omeka S 3.0 or higher
 - PHP 7.4 or higher with ZipArchive extension
+
+## Issues and Support
+
+Issue tracking for this module is centralized in the main
+[`exelearning/exelearning`](https://github.com/exelearning/exelearning) repository.
+Please [open new issues there](https://github.com/exelearning/exelearning/issues/new),
+and browse [existing `omeka-s`-labeled issues](https://github.com/exelearning/exelearning/issues?q=is%3Aissue+label%3Aomeka-s)
+before reporting a bug or requesting a feature.
 
 ## License
 
