@@ -251,7 +251,13 @@ class PreviewSessionStore
                 continue;
             }
 
-            $this->writeAsset($dir, $key, $bytes);
+            // Contract §5: index only after the bytes are durably accepted. A
+            // failed write is reported as `write-failed` and NEVER added to the
+            // asset index, the byte counter, or `stored`.
+            if (!$this->writeAsset($dir, $key, $bytes)) {
+                $rejected[] = ['key' => $key, 'reason' => 'write-failed'];
+                continue;
+            }
             $assetBytes += $length;
             $stored[] = $key;
         }
@@ -527,15 +533,23 @@ class PreviewSessionStore
         }
 
         // 6. Materialize rev/{next} as a full self-contained snapshot, then swap.
-        $this->materializeRevision($dir, $active, $next, $newDocs, $writes);
-        $this->writeJsonAtomic($dir . '/rev/' . $next . '/revision.json', [
-            'revision' => $next,
-            'assetRefs' => $assetRefs,
-            'fixedRefs' => $fixedRefs,
-            'documentBytes' => $documentBytes,
-            'documentCount' => $documentCount,
-        ]);
-        $this->swapPointer($dir, $next);
+        //    Contract §5 atomicity: a document write, metadata write, or pointer
+        //    swap failure aborts the WHOLE publish BEFORE the pointer moves — the
+        //    partial rev/{next} is discarded and `current` still points at the
+        //    old revision, so a reader never observes a half-materialized one.
+        $persisted = $this->materializeRevision($dir, $active, $next, $newDocs, $writes)
+            && $this->writeJsonAtomic($dir . '/rev/' . $next . '/revision.json', [
+                'revision' => $next,
+                'assetRefs' => $assetRefs,
+                'fixedRefs' => $fixedRefs,
+                'documentBytes' => $documentBytes,
+                'documentCount' => $documentCount,
+            ])
+            && $this->swapPointer($dir, $next);
+        if (!$persisted) {
+            $this->deleteDir($dir . '/rev/' . $next);
+            return ['status' => 500, 'message' => 'Failed to persist the revision'];
+        }
         $this->pruneOldRevisions($dir, $next);
         $this->touch($dir);
 
@@ -552,28 +566,35 @@ class PreviewSessionStore
      * @param int    $next
      * @param array<string, int>    $newDocs Full post-delta path → size set.
      * @param array<string, string> $writes  Written path → bytes.
+     * @return bool False if ANY document could not be written/linked, so the
+     *              caller aborts before the pointer swap (contract §5).
      */
-    private function materializeRevision(string $dir, int $active, int $next, array $newDocs, array $writes): void
+    protected function materializeRevision(string $dir, int $active, int $next, array $newDocs, array $writes): bool
     {
         $dstDocs = $dir . '/rev/' . $next . '/documents';
-        @mkdir($dstDocs, 0700, true);
+        if (!is_dir($dstDocs) && !@mkdir($dstDocs, 0700, true) && !is_dir($dstDocs)) {
+            return false; // @codeCoverageIgnore — rev dir uncreatable (I/O defense)
+        }
         $srcDocs = $dir . '/rev/' . $active . '/documents';
 
         foreach (array_keys($newDocs) as $path) {
             $dstFile = $dstDocs . '/' . $path;
-            $parent = dirname($dstFile);
-            if (!is_dir($parent)) {
-                @mkdir($parent, 0700, true);
-            }
             if (isset($writes[$path])) {
-                file_put_contents($dstFile, $writes[$path]);
+                if (!$this->atomicWrite($dstFile, $writes[$path])) {
+                    return false;
+                }
                 continue;
             }
+            $parent = dirname($dstFile);
+            if (!is_dir($parent) && !@mkdir($parent, 0700, true) && !is_dir($parent)) {
+                return false; // @codeCoverageIgnore — nested dir uncreatable (I/O defense)
+            }
             $srcFile = $srcDocs . '/' . $path;
-            if (!@link($srcFile, $dstFile)) {
-                @copy($srcFile, $dstFile); // @codeCoverageIgnore
+            if (!@link($srcFile, $dstFile) && !@copy($srcFile, $dstFile)) {
+                return false; // @codeCoverageIgnore — carry-forward link+copy both failed (I/O defense)
             }
         }
+        return true;
     }
 
     // =========================================================================
@@ -807,12 +828,13 @@ class PreviewSessionStore
         return $value > 0 ? $value : 0;
     }
 
-    /** Atomically point `current` at revision $n (write temp, then rename). */
-    private function swapPointer(string $dir, int $n): void
+    /**
+     * Atomically point `current` at revision $n. Returns false on write failure
+     * so the publish aborts before claiming the revision active (contract §5).
+     */
+    private function swapPointer(string $dir, int $n): bool
     {
-        $tmp = $dir . '/current.' . bin2hex(random_bytes(4)) . '.tmp';
-        file_put_contents($tmp, (string) $n);
-        rename($tmp, $dir . '/current');
+        return $this->atomicWrite($dir . '/current', (string) $n);
     }
 
     /** Keep the current and immediately previous revision; drop older ones. */
@@ -896,14 +918,14 @@ class PreviewSessionStore
         return is_file($this->assetFile($dir, $key));
     }
 
-    private function writeAsset(string $dir, string $key, string $bytes): void
+    /**
+     * Durably store an asset. Returns false when the bytes could not be written
+     * (so the caller reports `write-failed` and does not index it, per §5).
+     * Declared `protected` so a test can force a write failure deterministically.
+     */
+    protected function writeAsset(string $dir, string $key, string $bytes): bool
     {
-        $file = $this->assetFile($dir, $key);
-        $parent = dirname($file);
-        if (!is_dir($parent)) {
-            @mkdir($parent, 0700, true);
-        }
-        file_put_contents($file, $bytes);
+        return $this->atomicWrite($this->assetFile($dir, $key), $bytes);
     }
 
     // =========================================================================
@@ -971,15 +993,37 @@ class PreviewSessionStore
         return is_array($data) ? $data : null;
     }
 
-    private function writeJsonAtomic(string $path, array $data): void
+    private function writeJsonAtomic(string $path, array $data): bool
+    {
+        return $this->atomicWrite($path, (string) json_encode($data, JSON_UNESCAPED_SLASHES));
+    }
+
+    /**
+     * Durably write $bytes to $path: ensure the parent exists, write a temp file
+     * verifying the FULL length landed, then atomically rename it into place.
+     * Returns false on ANY failure (parent unavailable, failed/short write,
+     * failed rename) and never leaves a partial file at $path — so a caller must
+     * treat false as "not durably accepted" and never index it (contract §5).
+     * `@`-suppression only silences the warning; the RETURN is what callers check.
+     * Declared `protected` so the failure paths can be exercised in tests.
+     */
+    protected function atomicWrite(string $path, string $bytes): bool
     {
         $parent = dirname($path);
-        if (!is_dir($parent)) {
-            @mkdir($parent, 0700, true);
+        if (!is_dir($parent) && !@mkdir($parent, 0700, true) && !is_dir($parent)) {
+            return false;
         }
         $tmp = $path . '.' . bin2hex(random_bytes(4)) . '.tmp';
-        file_put_contents($tmp, json_encode($data, JSON_UNESCAPED_SLASHES));
-        rename($tmp, $path);
+        $written = @file_put_contents($tmp, $bytes);
+        if ($written === false || $written !== strlen($bytes)) {
+            @unlink($tmp); // @codeCoverageIgnore
+            return false; // @codeCoverageIgnore
+        }
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            return false;
+        }
+        return true;
     }
 
     /**

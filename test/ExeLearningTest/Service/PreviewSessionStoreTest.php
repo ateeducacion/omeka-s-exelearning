@@ -354,6 +354,90 @@ class PreviewSessionStoreTest extends TestCase
         $this->assertCount(2, $result['rejected']);
     }
 
+    public function testStoreAssetsReportsWriteFailedAndDoesNotIndexIt(): void
+    {
+        // Contract §5: a failed write must be reported `write-failed` and NEVER
+        // indexed. Force a durable write failure by replacing the assets/ dir
+        // with a file, so atomicWrite cannot create the parent.
+        $store = $this->store();
+        $id = $store->createSession(self::OWNER)['previewId'];
+        $assets = $this->base . '/' . $id . '/assets';
+        rmdir($assets);
+        file_put_contents($assets, 'not-a-dir');
+
+        $result = $store->storeAssets($id, self::OWNER, [$this->asset(self::PHOTO_KEY, 'PHOTO')]);
+
+        $this->assertSame([], $result['stored']);
+        $this->assertSame([['key' => self::PHOTO_KEY, 'reason' => 'write-failed']], $result['rejected']);
+
+        // Proof it was not indexed: a revision referencing the key is a missing
+        // asset (the failed write never entered the store).
+        unlink($assets); // let the revision path create its own dirs
+        $rev = $store->applyRevision($id, self::OWNER, [
+            'baseRevision' => 0, 'nextRevision' => 1, 'writes' => [],
+            'deletes' => [], 'assetRefs' => ['content/x.png' => self::PHOTO_KEY], 'fixedRefs' => [],
+        ], []);
+        $this->assertSame(422, $rev['status']);
+        $this->assertSame('missing-assets', $rev['reason']);
+    }
+
+    public function testPublishAbortsBeforePointerSwapWhenDocWriteFails(): void
+    {
+        // Contract §5 atomicity: a document-write failure inside the REAL
+        // materializeRevision aborts the publish BEFORE the pointer swap — the
+        // old revision stays active and the partial rev is discarded.
+        $now = function (): int {
+            return $this->time;
+        };
+        $store = new class ($this->base, new PreviewFixedResources($this->distRoot), [], $now) extends PreviewSessionStore {
+            public bool $failDocWrites = false;
+
+            protected function atomicWrite(string $path, string $bytes): bool
+            {
+                if ($this->failDocWrites && strpos($path, '/documents/') !== false) {
+                    return false;
+                }
+                return parent::atomicWrite($path, $bytes);
+            }
+        };
+        $id = $store->createSession(self::OWNER)['previewId'];
+        $store->applyRevision($id, self::OWNER, [
+            'baseRevision' => 0, 'nextRevision' => 1, 'writes' => ['index.html'],
+            'deletes' => [], 'assetRefs' => [], 'fixedRefs' => [],
+        ], ['<p>rev1</p>']);
+
+        $store->failDocWrites = true;
+        $result = $store->applyRevision($id, self::OWNER, [
+            'baseRevision' => 1, 'nextRevision' => 2, 'writes' => ['index.html'],
+            'deletes' => [], 'assetRefs' => [], 'fixedRefs' => [],
+        ], ['<p>rev2</p>']);
+
+        $this->assertSame(500, $result['status']);
+        // The pointer never moved: revision 1 is still served, partial rev/2 gone.
+        $this->assertSame('<p>rev1</p>', $store->resolveForServing($id, 'index.html')['bytes']);
+        $this->assertDirectoryDoesNotExist($this->base . '/' . $id . '/rev/2');
+    }
+
+    public function testAtomicWriteReportsSuccessAndRenameFailure(): void
+    {
+        $store = new class ($this->base, new PreviewFixedResources($this->distRoot)) extends PreviewSessionStore {
+            public function exposeAtomicWrite(string $path, string $bytes): bool
+            {
+                return $this->atomicWrite($path, $bytes);
+            }
+        };
+
+        // Success creates parents and writes the exact bytes.
+        $ok = $this->base . '/aw/file.bin';
+        $this->assertTrue($store->exposeAtomicWrite($ok, 'hello'));
+        $this->assertSame('hello', file_get_contents($ok));
+
+        // Target that is a directory → the rename can never succeed → false.
+        $dirTarget = $this->base . '/aw-dir';
+        mkdir($dirTarget, 0700, true);
+        $this->assertFalse($store->exposeAtomicWrite($dirTarget, 'x'));
+    }
+
     public function testStoreAssetsReturns404ForUnknownSession(): void
     {
         $store = $this->store();
