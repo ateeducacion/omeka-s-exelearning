@@ -66,6 +66,57 @@ class PreviewCsrfTest extends TestCase
         $this->assertTrue($second->isValid($token), 'the preview token must validate more than once');
     }
 
+    public function testPreviewTokenSurvivesMultipleSequentialRequests(): void
+    {
+        // Hop dimension: Laminas Csrf may (in some versions) call
+        // setExpirationHops(1), which would kill the token after ONE subsequent
+        // request regardless of timeout. Simulate several sequential publish
+        // requests (hops) and prove the preview token still validates on each.
+        $container = new ClockedSessionContainer(1000000);
+
+        $minter = PreviewCsrf::validator();
+        $minter->setSession($container);
+        $token = $minter->getHash();
+
+        for ($hop = 1; $hop <= 4; $hop++) {
+            $container->nextRequest();
+            $validator = PreviewCsrf::validator();
+            $validator->setSession($container);
+            $this->assertTrue(
+                $validator->isValid($token),
+                "the preview token must still validate at sequential request #$hop"
+            );
+        }
+    }
+
+    public function testPreviewMintArmsNeitherSecondsNorHopExpiry(): void
+    {
+        // Directly assert the shipped validator arms NO expiry on the preview
+        // container — neither seconds (timeout=null) nor hops.
+        $container = new ClockedSessionContainer(1000000);
+        $minter = PreviewCsrf::validator();
+        $minter->setSession($container);
+        $minter->getHash();
+
+        $this->assertFalse($container->secondsWereArmed(), 'preview mint must not arm a seconds expiry');
+        $this->assertFalse($container->hopsWereArmed(), 'preview mint must not arm a hop expiry');
+    }
+
+    public function testClockedContainerModelsHopExpiry(): void
+    {
+        // Guard against a vacuous hop test: prove the container actually expires
+        // on hops, so "survives 4 requests" above is meaningful.
+        $container = new ClockedSessionContainer(1000000);
+        $container->marker = 'present';
+        $container->setExpirationHops(1);
+
+        $container->nextRequest();
+        $this->assertSame('present', $container->marker, 'valid within the hop budget');
+
+        $container->nextRequest();
+        $this->assertNull($container->marker, 'expired once the hop budget is exceeded');
+    }
+
     public function testDefaultFormTokenExpiresAfterItsTtl(): void
     {
         // Control: the SAME Laminas validator with the default 300s timeout stamps
