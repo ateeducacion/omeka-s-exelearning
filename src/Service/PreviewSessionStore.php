@@ -31,8 +31,12 @@ namespace ExeLearning\Service;
  * DoS. All of applyRevision runs under an exclusive file lock, so the
  * validate → materialize → pointer-swap critical section cannot interleave with
  * a racing publish on the same session.
+ *
+ * Not `final`: the byte-accounting scan seam ({@see allSessions}) is `protected`
+ * so a test can spy on the scan count (the global-budget check must scan the
+ * session tree once per batch, not once per asset).
  */
-final class PreviewSessionStore
+class PreviewSessionStore
 {
     /**
      * `assetKey` wire format: `{assetId}@{contentHashPrefix}` — a 36-char
@@ -197,6 +201,19 @@ final class PreviewSessionStore
         $assetBytes = (int) $meta['assetBytes'];
         $documentBytes = $this->activeDocumentBytes($dir);
 
+        // Global-budget accounting is amortized across the whole batch. The
+        // session tree is scanned at most ONCE per request (lazily, on the first
+        // entry that actually reaches the global check) and the resulting
+        // snapshot is reused — and mutated by evictions — for every later entry,
+        // instead of the former allSessions() rescan per entry (O(M·N) FS ops).
+        // Semantics are byte-for-byte unchanged: $globalTotal keeps this session
+        // at its pre-batch size (its in-batch growth is only committed to
+        // session.json below, mirroring the reference's mid-batch counter
+        // staleness), and evictions persist across entries. A batch whose entries
+        // all fail a cheap check (or hold nothing new) never scans at all.
+        $globalSessions = null;
+        $globalTotal = 0;
+
         foreach ($entries as $entry) {
             $key = (string) ($entry['key'] ?? '');
             $bytes = (string) ($entry['bytes'] ?? '');
@@ -222,7 +239,14 @@ final class PreviewSessionStore
                 $rejected[] = ['key' => $key, 'reason' => 'session-budget-exceeded'];
                 continue;
             }
-            if (!$this->evictOthersForGlobal($previewId, $length)) {
+            if ($globalSessions === null) {
+                $globalSessions = $this->allSessions();
+                $globalTotal = 0;
+                foreach ($globalSessions as $session) {
+                    $globalTotal += $session['bytes'];
+                }
+            }
+            if (!$this->evictUntilFits($globalSessions, $previewId, $length, $globalTotal)) {
                 $rejected[] = ['key' => $key, 'reason' => 'global-budget-exceeded'];
                 continue;
             }
@@ -610,19 +634,40 @@ final class PreviewSessionStore
     }
 
     /**
-     * Evict other sessions (never `$currentId`) in LRU order until
-     * `$incomingBytes` fits the global budget. Returns false when it cannot fit
-     * even after evicting every other session.
+     * One-shot global-budget check for the revision publish path (called once
+     * per publish): snapshot all sessions, then evict others until
+     * `$incomingBytes` fits. Returns false when it cannot fit even after evicting
+     * every other session.
      */
     private function evictOthersForGlobal(string $currentId, int $incomingBytes): bool
     {
-        $budget = $this->limits['globalMaxBytes'];
         $sessions = $this->allSessions();
         $total = 0;
         foreach ($sessions as $session) {
             $total += $session['bytes'];
         }
+        return $this->evictUntilFits($sessions, $currentId, $incomingBytes, $total);
+    }
 
+    /**
+     * Evict other sessions (never `$currentId`) from the given snapshot, in LRU
+     * order, until `$incomingBytes` fits the global budget. Mutates `$sessions`
+     * (drops each evicted entry and deletes it on disk) and `$total` (the
+     * snapshot byte sum) so one snapshot can be reused across a whole asset
+     * batch. It deliberately does NOT add `$incomingBytes` to `$total`: this
+     * session's in-batch growth is not recounted (mirroring the reference's
+     * mid-batch counter staleness). Returns false when it cannot fit even after
+     * evicting every other session.
+     *
+     * @param array<int, array{id: string, dir: string, owner: int, bytes: int, lastAccess: int}> $sessions
+     * @param string $currentId
+     * @param int    $incomingBytes
+     * @param int    $total
+     * @return bool
+     */
+    private function evictUntilFits(array &$sessions, string $currentId, int $incomingBytes, int &$total): bool
+    {
+        $budget = $this->limits['globalMaxBytes'];
         while ($total + $incomingBytes > $budget) {
             $others = array_values(array_filter($sessions, static function (array $s) use ($currentId): bool {
                 return $s['id'] !== $currentId;
@@ -643,9 +688,12 @@ final class PreviewSessionStore
     /**
      * Enumerate every session with its byte total and last-access time.
      *
+     * Declared `protected` so a test can spy on the scan count (the batch must
+     * scan the tree once, not once per asset).
+     *
      * @return array<int, array{id: string, dir: string, owner: int, bytes: int, lastAccess: int}>
      */
-    private function allSessions(): array
+    protected function allSessions(): array
     {
         if (!is_dir($this->basePath)) {
             return []; // @codeCoverageIgnore

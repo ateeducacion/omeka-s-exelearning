@@ -81,6 +81,34 @@ class PreviewSessionStoreTest extends TestCase
         return ['key' => $key, 'size' => strlen($bytes), 'bytes' => $bytes];
     }
 
+    /**
+     * A store whose allSessions() scans are counted, to assert the global-budget
+     * check scans the session tree once per batch (not once per asset).
+     *
+     * @param array<string, int> $limits
+     */
+    private function countingStore(array $limits = []): PreviewSessionStore
+    {
+        $now = function (): int {
+            return $this->time;
+        };
+        return new class ($this->base, new PreviewFixedResources($this->distRoot), $limits, $now) extends PreviewSessionStore {
+            public int $scans = 0;
+
+            protected function allSessions(): array
+            {
+                $this->scans++;
+                return parent::allSessions();
+            }
+        };
+    }
+
+    /** A distinct, well-formed assetKey ({36-char id}@{hex hash}) per index. */
+    private function uniqueKey(int $n): string
+    {
+        return sprintf('%08d-0000-4000-8000-%012d@%08x', $n, $n, $n);
+    }
+
     // =========================================================================
     // createSession
     // =========================================================================
@@ -250,6 +278,61 @@ class PreviewSessionStoreTest extends TestCase
         // The LRU other session (A) was evicted to make room.
         $this->assertDirectoryDoesNotExist($this->base . '/' . $a);
         $this->assertDirectoryExists($this->base . '/' . $b);
+    }
+
+    public function testStoreAssetsScansSessionTreeOncePerBatch(): void
+    {
+        // The global-budget check must amortize its session-tree scan across the
+        // whole batch: ONE allSessions() pass per request, not one per asset
+        // (the former O(M·N) behavior). A spy subclass counts the scans while a
+        // tight global budget forces at least one eviction during the batch.
+        $store = $this->countingStore(['globalMaxBytes' => 22]);
+
+        // Seed several OTHER sessions on disk (the N in O(M·N)).
+        for ($i = 1; $i <= 4; $i++) {
+            $other = $store->createSession(100 + $i)['previewId'];
+            $store->storeAssets($other, 100 + $i, [$this->asset($this->uniqueKey($i), 'xxxxx')]);
+        }
+
+        $target = $store->createSession(self::OWNER)['previewId'];
+        $store->scans = 0; // count only the batch under test
+
+        // A batch of M assets, each subject to the global-budget check.
+        $entries = [];
+        for ($i = 0; $i < 4; $i++) {
+            $entries[] = $this->asset($this->uniqueKey(200 + $i), 'yyyyy');
+        }
+        $result = $store->storeAssets($target, self::OWNER, $entries);
+
+        $this->assertSame(1, $store->scans, 'the session tree must be scanned once per batch, not per asset');
+        // Semantics unchanged: every accepted entry is stored, none spuriously
+        // rejected, and the tight budget evicted at least one other session.
+        $this->assertCount(4, $result['stored']);
+        $this->assertSame([], $result['rejected']);
+        $survivors = array_filter(
+            array_diff(scandir($this->base), ['.', '..', '.htaccess', 'index.php', '.last_sweep']),
+            fn($e) => is_dir($this->base . '/' . $e)
+        );
+        // 4 seeded + 1 target = 5 created; at least one seeded session was evicted.
+        $this->assertLessThan(5, count($survivors));
+    }
+
+    public function testStoreAssetsSkipsGlobalScanWhenNoEntryReachesIt(): void
+    {
+        // When every entry fails a cheap pre-check (here: invalid key), no entry
+        // reaches the global-budget check, so the session tree is never scanned.
+        $store = $this->countingStore();
+        $id = $store->createSession(self::OWNER)['previewId'];
+        $store->scans = 0;
+
+        $result = $store->storeAssets($id, self::OWNER, [
+            $this->asset('not-a-valid-key', 'x'),
+            $this->asset('also-invalid', 'y'),
+        ]);
+
+        $this->assertSame(0, $store->scans, 'a batch with no admissible entry must not scan the session tree');
+        $this->assertSame([], $result['stored']);
+        $this->assertCount(2, $result['rejected']);
     }
 
     public function testStoreAssetsReturns404ForUnknownSession(): void
