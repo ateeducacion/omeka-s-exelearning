@@ -98,6 +98,38 @@ class PreviewSessionStoreTest extends TestCase
         $this->assertDirectoryExists($this->base . '/' . $result['previewId']);
     }
 
+    public function testCreateSessionWritesWebDenyGuardIntoTheBaseDir(): void
+    {
+        // The store lives under the Omeka files/ tree, which Apache serves
+        // directly. A deny guard must exist so a direct GET can never reach a
+        // materialized document (which would serve author HTML same-origin
+        // WITHOUT the sandbox CSP, a second un-sandboxed serving path).
+        $store = $this->store();
+        $store->createSession(self::OWNER);
+
+        $htaccess = $this->base . '/.htaccess';
+        $this->assertFileExists($htaccess);
+        $content = file_get_contents($htaccess);
+        $this->assertStringContainsString('Require all denied', $content); // Apache 2.4
+        $this->assertStringContainsString('Deny from all', $content);       // Apache 2.2
+
+        $index = $this->base . '/index.php';
+        $this->assertFileExists($index);
+        $this->assertStringContainsString('Silence is golden', file_get_contents($index));
+    }
+
+    public function testAccessGuardIsWrittenIdempotentlyAndNotClobbered(): void
+    {
+        $store = $this->store();
+        $store->createSession(self::OWNER);
+        // A guard already present (e.g. a stricter admin override) must survive a
+        // later session creation.
+        file_put_contents($this->base . '/.htaccess', "Require all denied\n# admin-override");
+        $store->createSession(self::OWNER);
+
+        $this->assertStringContainsString('# admin-override', file_get_contents($this->base . '/.htaccess'));
+    }
+
     public function testCreateSessionEvictsOldestOwnedWhenAtPerUserCap(): void
     {
         $store = $this->store(['maxSessionsPerUser' => 2]);

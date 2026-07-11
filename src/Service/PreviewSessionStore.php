@@ -45,6 +45,19 @@ final class PreviewSessionStore
     public const PREVIEW_ID_RE =
         '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/';
 
+    /**
+     * Apache deny guard written into the session base directory. Covers both
+     * Apache 2.4 (mod_authz_core) and 2.2 syntaxes — the same upload-protection
+     * pattern the framework uses for its own files/ tree.
+     */
+    private const DENY_HTACCESS =
+        "<IfModule mod_authz_core.c>\n"
+        . "Require all denied\n"
+        . "</IfModule>\n"
+        . "<IfModule !mod_authz_core.c>\n"
+        . "Deny from all\n"
+        . "</IfModule>\n";
+
     /** Reference default budgets (mirrors DEFAULT_PREVIEW_SESSION_LIMITS). */
     private const DEFAULT_LIMITS = [
         'ttlSeconds' => 1800,
@@ -833,6 +846,36 @@ final class PreviewSessionStore
     {
         if (!is_dir($this->basePath)) {
             @mkdir($this->basePath, 0700, true);
+        }
+        $this->writeAccessGuard();
+    }
+
+    /**
+     * Write a deny guard into the session base directory so the preview tree is
+     * NEVER web-servable. The store lives under the Omeka file store, which
+     * Apache serves directly; without this, a direct GET to a materialized
+     * document (rev/{n}/documents/*.html) would return untrusted author HTML
+     * SAME-ORIGIN and WITHOUT the sandbox CSP — PreviewController adds the CSP,
+     * the static web server does not — a second, un-sandboxed serving path that
+     * defeats the opaque-origin isolation. Written idempotently on the BASE dir
+     * only (never per session), so an existing/stricter guard is never clobbered.
+     *
+     * This .htaccess is the Apache guard only. nginx and other web servers do
+     * not read it: those deployments must place the store outside the web root
+     * or add an equivalent `location` deny block.
+     */
+    private function writeAccessGuard(): void
+    {
+        if (!is_dir($this->basePath)) {
+            return; // @codeCoverageIgnore
+        }
+        $htaccess = $this->basePath . '/.htaccess';
+        if (!is_file($htaccess)) {
+            @file_put_contents($htaccess, self::DENY_HTACCESS);
+        }
+        $index = $this->basePath . '/index.php';
+        if (!is_file($index)) {
+            @file_put_contents($index, "<?php // Silence is golden.\n");
         }
     }
 
