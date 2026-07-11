@@ -192,6 +192,22 @@ class PreviewSessionController extends AbstractActionController
         return null;
     }
 
+    /**
+     * Validate against the dedicated, long-lived preview CSRF namespace
+     * ({@see PreviewCsrf::NAME}) rather than the default 300s form-token
+     * namespace, so a token minted once at editor bootstrap keeps validating
+     * across an entire editing session's preview publishes.
+     *
+     * @param string $token
+     * @return bool
+     *
+     * @codeCoverageIgnore Requires a live session container (admin runtime).
+     */
+    protected function csrfTokenIsValid(string $token): bool
+    {
+        return (new \Laminas\Validator\Csrf(['name' => PreviewCsrf::NAME]))->isValid($token);
+    }
+
     /** The authenticated owner's id. */
     private function ownerId(): int
     {

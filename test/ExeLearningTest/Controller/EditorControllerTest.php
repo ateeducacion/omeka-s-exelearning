@@ -720,6 +720,53 @@ class EditorControllerTest extends TestCase
         $this->assertSame('', $this->callProtectedMethod($this->controller, 'resolveBasePath', [$request]));
     }
 
+    // =========================================================================
+    // buildPreviewHttpConfig() — normalized HTTP preview transport (contract v2)
+    // =========================================================================
+
+    public function testBuildPreviewHttpConfigDerivesBothUrlsFromOrigin(): void
+    {
+        $config = $this->callProtectedMethod(
+            $this->controller,
+            'buildPreviewHttpConfig',
+            ['https://example.com/omeka-s', 'tok3n-abc123']
+        );
+
+        $this->assertSame(2, $config['protocolVersion']);
+        $this->assertSame(
+            'https://example.com/omeka-s/api/exelearning/preview-session',
+            $config['managementBaseUrl']
+        );
+        $this->assertSame(
+            'https://example.com/omeka-s/exelearning/preview',
+            $config['servingBaseUrl']
+        );
+        $this->assertSame(['X-CSRF-Token' => 'tok3n-abc123'], $config['managementHeaders']);
+    }
+
+    public function testBuildPreviewHttpConfigWorksAtRootInstall(): void
+    {
+        // Root install: origin is serverUrl with an empty basePath.
+        $config = $this->callProtectedMethod(
+            $this->controller,
+            'buildPreviewHttpConfig',
+            ['https://example.com', 'zzz']
+        );
+
+        $this->assertSame(
+            'https://example.com/api/exelearning/preview-session',
+            $config['managementBaseUrl']
+        );
+        $this->assertSame('https://example.com/exelearning/preview', $config['servingBaseUrl']);
+    }
+
+    public function testPreviewCsrfUsesDedicatedNamespace(): void
+    {
+        // The preview token must NOT share the default form-token namespace, so
+        // the form token's 5-minute container-global expiry cannot wipe it.
+        $this->assertSame('exelearning-preview', \ExeLearning\Controller\PreviewCsrf::NAME);
+    }
+
     public function testBuildInstallStatusPayloadHandlesIdleNotInstalledState(): void
     {
         $settings = new class {

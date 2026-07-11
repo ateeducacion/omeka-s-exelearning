@@ -140,12 +140,38 @@ class EditorController extends AbstractActionController
             'config' => $config,
             'editorBaseUrl' => $config['editorBaseUrl'],
             'themeRegistryOverride' => $themeRegistryOverride,
+            // Normalized HTTP preview transport config (serving contract v2 §1).
+            // The dedicated long-lived preview CSRF token rides managementHeaders
+            // so publishing survives a whole editing session (see PreviewCsrf).
+            'previewHttp' => $this->buildPreviewHttpConfig($serverUrl . $basePath, PreviewCsrf::mint()),
         ]);
 
         $view->setTemplate('exelearning/editor-bootstrap');
         $view->setTerminal(true);
 
         return $view;
+    }
+
+    /**
+     * Build the normalized `previewHttp` block the embedded editor reads from
+     * `window.__EXE_EMBEDDING_CONFIG__` to drive the opaque HTTP preview
+     * transport (serving contract v2 §1). Both URLs are derived from the same
+     * `serverUrl + basePath` origin as `saveEndpoint`, so a subdirectory or
+     * php-wasm playground install resolves them identically. The CSRF token is
+     * sent (via `managementHeaders`) on every management request.
+     *
+     * @param string $origin    serverUrl + basePath (no trailing slash).
+     * @param string $csrfToken Long-lived preview CSRF token (PreviewCsrf::mint()).
+     * @return array
+     */
+    protected function buildPreviewHttpConfig(string $origin, string $csrfToken): array
+    {
+        return [
+            'protocolVersion' => 2,
+            'managementBaseUrl' => $origin . '/api/exelearning/preview-session',
+            'servingBaseUrl' => $origin . '/exelearning/preview',
+            'managementHeaders' => ['X-CSRF-Token' => $csrfToken],
+        ];
     }
 
     /**
