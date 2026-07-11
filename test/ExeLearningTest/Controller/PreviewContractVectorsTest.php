@@ -179,14 +179,20 @@ class PreviewContractVectorsTest extends TestCase
 
     private function replayServe(array $step, string $path, string $previewId): void
     {
+        [$rawPath, $query] = array_pad(explode('?', $path, 2), 2, '');
         $prefix = '/preview/' . $previewId . '/';
-        $file = $this->startsWith($path, $prefix) ? substr($path, strlen($prefix)) : '';
+        $file = $this->startsWith($rawPath, $prefix) ? substr($rawPath, strlen($prefix)) : '';
 
         $controller = new PreviewController($this->store);
         $controller->setRouteParams(['previewId' => $previewId, 'file' => $file]);
-        if (isset($step['request']['headers'])) {
-            $controller->setRequest($this->requestWithHeaders($step['request']['headers']));
-        }
+        // Always drive the controller with a request carrying the real URI path
+        // AND any headers: the bare-capability-URL redirect (§4) reads the path,
+        // not the route's file=index.html default.
+        // TODO(re-vendor): the shared vectors.json will gain bare-root (302) and
+        // malformed/multi/non-bytes Range (200-full) steps once core re-vendors
+        // the §4 deltas; this harness already routes the path + query so those
+        // steps replay without forking the JSON.
+        $controller->setRequest($this->serveRequest($rawPath, $query, $step['request']['headers'] ?? []));
         $response = $controller->serveAction();
 
         $this->assertSame($step['expect']['status'], $response->getStatusCode(), 'status for ' . $step['id']);
@@ -347,16 +353,49 @@ class PreviewContractVectorsTest extends TestCase
     }
 
     /**
+     * A serving-request stub exposing getUri()->getPath()/getQuery() (for the
+     * bare-URL redirect decision) and a case-insensitive getHeaders()->get()
+     * (for Range / If-None-Match).
+     *
+     * @param string $path
+     * @param string $query
      * @param array<string, string> $headers
      */
-    private function requestWithHeaders(array $headers): object
+    private function serveRequest(string $path, string $query, array $headers): object
     {
-        return new class ($headers) {
+        return new class ($path, $query, $headers) {
+            private string $path;
+            private string $query;
             private array $headers;
-            public function __construct(array $headers)
+
+            public function __construct(string $path, string $query, array $headers)
             {
+                $this->path = $path;
+                $this->query = $query;
                 $this->headers = $headers;
             }
+
+            public function getUri()
+            {
+                return new class ($this->path, $this->query) {
+                    private string $path;
+                    private string $query;
+                    public function __construct(string $path, string $query)
+                    {
+                        $this->path = $path;
+                        $this->query = $query;
+                    }
+                    public function getPath(): string
+                    {
+                        return $this->path;
+                    }
+                    public function getQuery(): string
+                    {
+                        return $this->query;
+                    }
+                };
+            }
+
             public function getHeaders()
             {
                 $headers = $this->headers;

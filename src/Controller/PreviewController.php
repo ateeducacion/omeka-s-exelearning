@@ -120,6 +120,16 @@ class PreviewController extends AbstractActionController
             return $this->preview404();
         }
 
+        // 1b) The bare capability URL (…/{previewId} or …/{previewId}/) must
+        //     never serve index.html bytes: 302 to …/{previewId}/index.html
+        //     (contract v2 §4). The decision is driven by the ACTUAL request
+        //     path, not the route's file=index.html default, so an explicit
+        //     …/{previewId}/index.html still serves 200.
+        $redirect = $this->bareCapabilityRedirect($previewId);
+        if ($redirect !== null) {
+            return $this->previewRedirect($redirect);
+        }
+
         // 2) Traversal-safe normalization for the exact-key layer lookup.
         $path = $this->normalizePath($relPath);
         if ($path === null) {
@@ -286,6 +296,69 @@ class PreviewController extends AbstractActionController
     }
 
     /**
+     * If the request targets the bare capability URL (`…/{previewId}` or
+     * `…/{previewId}/`, no file component), return the `Location` to redirect to
+     * (`…/{previewId}/index.html`, original query string preserved); otherwise
+     * null (serve the explicit file).
+     *
+     * The decision reads the ACTUAL request path — not the `file` route param,
+     * which the route defaults to `index.html` and so cannot distinguish a bare
+     * URL from an explicit `/index.html`. When the request exposes no URI, or the
+     * previewId is absent from its path (e.g. a bare unit-test stub), it returns
+     * null: never redirect on uncertainty.
+     *
+     * @param string $previewId Validated capability UUID.
+     * @return string|null
+     */
+    private function bareCapabilityRedirect(string $previewId): ?string
+    {
+        $request = $this->getRequest();
+        if (!method_exists($request, 'getUri')) {
+            return null;
+        }
+        $uri = $request->getUri();
+        if (!is_object($uri) || !method_exists($uri, 'getPath')) {
+            return null;
+        }
+        $path = (string) $uri->getPath();
+        $pos = strpos($path, $previewId);
+        if ($pos === false) {
+            return null;
+        }
+        $rest = substr($path, $pos + strlen($previewId));
+        if ($rest !== '' && $rest !== '/') {
+            return null; // an explicit file follows — serve it, don't redirect.
+        }
+        $location = rtrim($path, '/') . '/index.html';
+        if (method_exists($uri, 'getQuery')) {
+            $query = $uri->getQuery();
+            if (is_string($query) && $query !== '') {
+                $location .= '?' . $query;
+            }
+        }
+        return $location;
+    }
+
+    /**
+     * A 302 to `$location` carrying the base hardening headers the contract
+     * requires on every serving response. text/plain, no CSP, `no-store` — the
+     * bare capability URL never emits document bytes.
+     *
+     * @param string $location
+     * @return HttpResponse
+     */
+    private function previewRedirect(string $location): HttpResponse
+    {
+        $response = new HttpResponse();
+        $response->setStatusCode(302);
+        $headers = $response->getHeaders();
+        $this->applyBaseHeaders($headers, 'text/plain');
+        $headers->addHeaderLine('Cache-Control', 'no-store');
+        $headers->addHeaderLine('Location', $location);
+        return $response;
+    }
+
+    /**
      * Whether a MIME type executes script when opened top-level or framed:
      * text/html, image/svg+xml, application/xml, text/xml,
      * application/xhtml+xml. Mirrors eXe core isScriptableDocumentType().
@@ -396,9 +469,14 @@ class PreviewController extends AbstractActionController
 
     /**
      * Parse a single-range `Range` header against a body of `$total` bytes.
-     * Returns null when no range was requested, an inclusive `{start, end}`
-     * window when satisfiable, or the string `'unsatisfiable'` for anything else
-     * (multi-range, malformed, out of bounds) — the contract answers those 416.
+     * Per serving contract v2 §4:
+     *  - `null` when the header is absent, OR malformed / multi-range / a
+     *    non-`bytes` unit — a Range the server does not understand is IGNORED and
+     *    answered with a normal `200` full body, not `416`;
+     *  - `'unsatisfiable'` for a SYNTACTICALLY VALID single range that cannot be
+     *    met (a `first-byte-pos` at/after the end, or a zero-length suffix) ->
+     *    `416`;
+     *  - an inclusive `{start, end}` window when satisfiable -> `206`.
      *
      * @param string|null $value
      * @param int $total
@@ -409,30 +487,54 @@ class PreviewController extends AbstractActionController
         if ($value === null || $value === '') {
             return null;
         }
-        if (!preg_match('/^bytes=(\d*)-(\d*)$/', trim($value), $matches)) {
-            return 'unsatisfiable';
+        $value = trim($value);
+
+        // Only the "bytes" unit is supported; any other unit is ignored (200).
+        if (strncasecmp($value, 'bytes=', 6) !== 0) {
+            return null;
+        }
+        $spec = substr($value, 6);
+
+        // Multiple ranges are unsupported; ignore the whole header (200).
+        if (strpos($spec, ',') !== false) {
+            return null;
+        }
+        // A single byte-range-spec: first-byte-pos / last-byte-pos, both digits,
+        // at least one present. Anything else is malformed -> ignore (200).
+        if (!preg_match('/^(\d*)-(\d*)$/', $spec, $matches)) {
+            return null;
         }
         $rawStart = $matches[1];
         $rawEnd = $matches[2];
         if ($rawStart === '' && $rawEnd === '') {
-            return 'unsatisfiable';
+            return null;
         }
+
         if ($rawStart === '') {
+            // Suffix range (last N bytes). A zero-length suffix is a valid but
+            // unsatisfiable spec.
             $suffix = (int) $rawEnd;
             if ($suffix === 0 || $total === 0) {
                 return 'unsatisfiable';
             }
             return ['start' => max(0, $total - $suffix), 'end' => $total - 1];
         }
+
         $start = (int) $rawStart;
-        if ($start >= $total) {
-            return 'unsatisfiable';
-        }
         if ($rawEnd === '') {
+            if ($start >= $total) {
+                return 'unsatisfiable';
+            }
             return ['start' => $start, 'end' => $total - 1];
         }
+
         $end = (int) $rawEnd;
         if ($end < $start) {
+            // last-byte-pos < first-byte-pos is an INVALID spec (RFC 9110
+            // §14.1.2), not merely unsatisfiable -> ignore the header (200).
+            return null;
+        }
+        if ($start >= $total) {
             return 'unsatisfiable';
         }
         return ['start' => $start, 'end' => min($end, $total - 1)];

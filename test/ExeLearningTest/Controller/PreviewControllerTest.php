@@ -106,6 +106,83 @@ class PreviewControllerTest extends TestCase
     }
 
     // =========================================================================
+    // serveAction(): bare capability URL -> 302 to index.html (contract v2 §4)
+    // =========================================================================
+
+    public function testServeActionRedirectsBareCapabilityUrlToIndexHtml(): void
+    {
+        // A bare …/{previewId} (no file) must 302 to …/{previewId}/index.html,
+        // never serve index.html bytes at the bare URL.
+        $controller = $this->servingController(
+            ['kind' => 'document', 'bytes' => '<html></html>'],
+            $this->requestWithUri('/exelearning/preview/' . self::VALID_UUID)
+        );
+        $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'index.html']);
+
+        $response = $controller->serveAction();
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame(
+            '/exelearning/preview/' . self::VALID_UUID . '/index.html',
+            $response->getHeaders()->get('Location')->getFieldValue()
+        );
+        $this->assertBaseHardening($response);
+        $this->assertSame('no-store', $response->getHeaders()->get('Cache-Control')->getFieldValue());
+        $this->assertSame('', $response->getContent());
+    }
+
+    public function testServeActionRedirectsBareCapabilityUrlWithTrailingSlash(): void
+    {
+        $controller = $this->servingController(
+            ['kind' => 'document', 'bytes' => '<html></html>'],
+            $this->requestWithUri('/exelearning/preview/' . self::VALID_UUID . '/')
+        );
+        $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'index.html']);
+
+        $response = $controller->serveAction();
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame(
+            '/exelearning/preview/' . self::VALID_UUID . '/index.html',
+            $response->getHeaders()->get('Location')->getFieldValue()
+        );
+    }
+
+    public function testServeActionPreservesQueryStringOnBareRedirect(): void
+    {
+        $controller = $this->servingController(
+            ['kind' => 'document', 'bytes' => '<html></html>'],
+            $this->requestWithUri('/exelearning/preview/' . self::VALID_UUID, 'exe-teacher=1&v=3')
+        );
+        $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'index.html']);
+
+        $response = $controller->serveAction();
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame(
+            '/exelearning/preview/' . self::VALID_UUID . '/index.html?exe-teacher=1&v=3',
+            $response->getHeaders()->get('Location')->getFieldValue()
+        );
+    }
+
+    public function testServeActionDoesNotRedirectExplicitIndexHtml(): void
+    {
+        // An explicit …/{previewId}/index.html serves 200 — no redirect — even
+        // though the route defaults `file` to index.html for the bare URL too.
+        $controller = $this->servingController(
+            ['kind' => 'document', 'bytes' => '<html>hi</html>'],
+            $this->requestWithUri('/exelearning/preview/' . self::VALID_UUID . '/index.html')
+        );
+        $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'index.html']);
+
+        $response = $controller->serveAction();
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('<html>hi</html>', $response->getContent());
+        $this->assertNull($response->getHeaders()->get('Location'));
+    }
+
+    // =========================================================================
     // serveAction(): documents (layer 3) — no-store + CSP when scriptable
     // =========================================================================
 
@@ -317,20 +394,46 @@ class PreviewControllerTest extends TestCase
         $this->assertSame('bytes 7-9/10', $response->getHeaders()->get('Content-Range')->getFieldValue());
     }
 
-    public function testServeAssetMalformedRangeIsUnsatisfiable(): void
+    /**
+     * A malformed / multi-range / non-bytes Range is IGNORED (200 full body),
+     * not answered 416 (serving contract v2 §4).
+     *
+     * @dataProvider ignoredRangeProvider
+     */
+    public function testServeAssetIgnoredRangeReturnsFullBody(string $range): void
     {
         $controller = $this->servingController(
             ['kind' => 'asset', 'bytes' => '0123456789', 'etag' => 'clip'],
-            $this->requestWithHeaders(['Range' => 'items=1-2'])
+            $this->requestWithHeaders(['Range' => $range])
         );
         $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'media/clip.mp4']);
 
         $response = $controller->serveAction();
 
-        $this->assertSame(416, $response->getStatusCode());
+        $this->assertSame(200, $response->getStatusCode(), $range . ' must be ignored -> 200');
+        $this->assertSame('0123456789', $response->getContent());
+        $headers = $response->getHeaders();
+        $this->assertSame('10', $headers->get('Content-Length')->getFieldValue());
+        // A full 200 carries no Content-Range and still advertises range support.
+        $this->assertNull($headers->get('Content-Range'));
+        $this->assertSame('bytes', $headers->get('Accept-Ranges')->getFieldValue());
+    }
+
+    public function ignoredRangeProvider(): array
+    {
+        return [
+            'non-bytes-unit' => ['items=1-2'],
+            'multi-range' => ['bytes=0-1,3-4'],
+            'both-open' => ['bytes=-'],
+            'end-before-start' => ['bytes=5-2'],
+            'garbage' => ['bytes=abc'],
+            'trailing-junk' => ['bytes=1-2x'],
+        ];
     }
 
     /**
+     * A syntactically valid but unsatisfiable single range is 416.
+     *
      * @dataProvider unsatisfiableRangeProvider
      */
     public function testServeAssetEdgeCaseRangesAreUnsatisfiable(string $range): void
@@ -349,8 +452,7 @@ class PreviewControllerTest extends TestCase
     public function unsatisfiableRangeProvider(): array
     {
         return [
-            'both-open' => ['bytes=-'],
-            'end-before-start' => ['bytes=5-2'],
+            'start-past-end' => ['bytes=99-'],
             'zero-suffix' => ['bytes=-0'],
         ];
     }
@@ -553,6 +655,58 @@ class PreviewControllerTest extends TestCase
                                 };
                             }
                         }
+                        return null;
+                    }
+                };
+            }
+        };
+    }
+
+    /**
+     * A request stub exposing getUri()->getPath()/getQuery(), for the bare
+     * capability-URL redirect decision (which reads the real request path).
+     */
+    private function requestWithUri(string $path, string $query = ''): object
+    {
+        return new class ($path, $query) {
+            private string $path;
+            private string $query;
+
+            public function __construct(string $path, string $query)
+            {
+                $this->path = $path;
+                $this->query = $query;
+            }
+
+            public function getUri()
+            {
+                return new class ($this->path, $this->query) {
+                    private string $path;
+                    private string $query;
+
+                    public function __construct(string $path, string $query)
+                    {
+                        $this->path = $path;
+                        $this->query = $query;
+                    }
+
+                    public function getPath(): string
+                    {
+                        return $this->path;
+                    }
+
+                    public function getQuery(): string
+                    {
+                        return $this->query;
+                    }
+                };
+            }
+
+            public function getHeaders()
+            {
+                return new class {
+                    public function get($name)
+                    {
                         return null;
                     }
                 };
