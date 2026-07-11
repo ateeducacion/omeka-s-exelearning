@@ -3,8 +3,10 @@
 This module implements the eXeLearning **editor preview serving contract v2**: it
 serves the editor preview of **untrusted author HTML/JS** over HTTP in an
 **opaque origin**, keyed by an unguessable capability id, without ever publishing
-the content under `/files/exelearning/`. It is the host-served, same-origin-safe
-alternative to the editor's `srcdoc` fallback.
+the content under `/files/exelearning/`. It is the host-served opaque transport
+the **embedded** editor requires: embedded editors never fall back to `srcdoc`
+(it is removed as an authored-content transport) — without a valid `previewHttp`
+config the editor fails closed with a clear error, never a same-origin document.
 
 - **Canonical source (single source of truth):** eXe core
   `doc/development/preview-serving-contract.md`. Everything below mirrors it; on
@@ -110,8 +112,17 @@ The path never does filesystem arithmetic: documents/assets are exact-key reads,
 and only the server-controlled manifest path reaches the filesystem (with
 containment checks) for the fixed layer.
 
-- **Range requests.** Session-asset responses advertise `Accept-Ranges: bytes`
-  and honor a single range (`206`, `416` on invalid).
+- **Bare capability URL.** A `GET` to `…/{previewId}` or `…/{previewId}/` (no
+  file) **302-redirects** to `…/{previewId}/index.html` (query string
+  preserved); it never serves `index.html` bytes at the bare URL. The redirect
+  is driven by the actual request path, so an explicit `…/index.html` still
+  serves `200`.
+- **Range requests.** Session-asset responses advertise `Accept-Ranges: bytes`.
+  A single **satisfiable** range → `206`; a syntactically valid but
+  **unsatisfiable** single range (start at/after the end, or a zero-length
+  suffix) → `416`; a **malformed / multi-range / non-`bytes`** Range is ignored
+  and answered with a normal `200` full body (a Range the server cannot
+  interpret is not an error).
 - **Conditional requests.** Session-asset responses carry `ETag: "<assetKey>"`
   and honor `If-None-Match` with `304`.
 
@@ -200,6 +211,18 @@ the incoming revision materializes into a fresh `rev/{n}` directory, then the
 pointer once and observes revision *N* or *N+1*, never a mixture. Until the first
 revision publishes, the serving route 404s.
 
+**Never web-servable.** The store lives under the Omeka file store, which the web
+server serves directly. `PreviewSessionStore` writes an Apache deny guard
+(`.htaccess` + `index.php` stub) into `{file_store}/exelearning-preview/`, but
+**nginx and other non-Apache servers ignore it**. Those deployments **MUST** deny
+direct web access to `{file_store}/exelearning-preview/` (the shipped
+`data/nginx-exelearning.conf` and `docker/nginx-exelearning.conf` samples include
+the `location ^~ /files/exelearning-preview/ { return 403; }` rule — note the
+`-preview/` prefix is *not* covered by the existing `/files/exelearning/` rule).
+Without this, a direct `GET` to a materialized document would serve untrusted
+author HTML same-origin **without** the sandbox CSP — a second, un-sandboxed
+serving path that defeats the opaque-origin isolation.
+
 ## Budgets & TTL (DoS bounds)
 
 Enforced by the store (reference defaults, overridable per instance): 30-minute
@@ -210,32 +233,63 @@ they are never a durable store.
 
 ## How the editor activates it
 
-The editor selects this transport deterministically from its embedding config —
-there is **no silent fallback** to a same-origin document:
+`EditorController::editAction` injects a normalized `previewHttp` block into
+`window.__EXE_EMBEDDING_CONFIG__` (serving contract v2 §1). Omeka's management
+and serving routes live under **two distinct top-level prefixes**
+(`/api/exelearning/…` vs `/exelearning/preview`), which a single `previewBasePath`
+could not express — so the config carries **both** URLs explicitly:
 
 ```jsonc
 {
-  "embeddingConfig": {
-    "previewTransport": "http",
-    "previewBasePath": "<omeka-base>/exelearning"
+  "previewHttp": {
+    "protocolVersion": 2,
+    "managementBaseUrl": "<omeka-base>/api/exelearning/preview-session",
+    "servingBaseUrl": "<omeka-base>/exelearning/preview",
+    "managementHeaders": { "X-CSRF-Token": "<preview-scoped Laminas CSRF token>" }
   }
 }
 ```
 
-The client then talks to `{previewBasePath}/preview/{previewId}/*` and the
-management API under `/api/exelearning/preview-session`. **Never** serve the
-preview same-origin or via a Service Worker — an SW cannot back an opaque iframe
-(its subresources bypass the SW).
+Both URLs are derived from the same `serverUrl + basePath` origin as
+`saveEndpoint`, so a subdirectory or php-wasm playground install resolves them
+identically. The editor selects the `HttpPreviewProvider` deterministically when
+`previewHttp` is present and valid; when it is **absent or invalid** the editor
+fails closed with a clear error — there is **no silent fallback** to a
+same-origin document, and **never** a Service Worker (an SW cannot back an opaque
+iframe: its subresources bypass the SW).
 
-## What stays on `srcdoc` / the php-wasm escape hatch
+`managementHeaders['X-CSRF-Token']` carries a **preview-scoped, long-lived**
+Laminas CSRF token (`PreviewCsrf`, namespace `exelearning-preview`,
+`timeout => null`), **not** the default 300 s form token. The default token is
+not single-use (`Csrf::isValid()` is a pure comparison), but it stamps an
+absolute, container-global 5-minute expiry that is never refreshed on validation,
+so a token minted at editor load would 403 every publish after ~5 minutes of
+editing. The dedicated namespace isolates the preview token from the save token's
+expiry so a long editing session keeps previewing.
 
-A pure serverless static/PWA editor keeps the self-contained `iframe.srcdoc`
-transport. The php-wasm **Playground** (the whole CMS emulated by a Service
-Worker) cannot serve opaque content at all, so its **published-content** demos
-fall back to the dev-only `EXELEARNING_UNSAFE_LEGACY_IFRAME` hatch
-(`IframeSandbox::isUnsafeLegacy()`) — off by default, never a UI setting. Editor
-*preview* is unaffected: it uses the opaque `srcdoc` transport, which needs no
-server.
+> **Editor-build dependency.** These endpoints are dormant until the installed
+> static editor build ships the `HttpPreviewProvider` and its
+> `bundles/preview-fixed-resources.json` manifest. An older editor build that
+> still expects `srcdoc`/`previewBasePath` will not consume `previewHttp`; update
+> the editor (module config → *Update to Latest Version*) to activate the opaque
+> HTTP preview.
+
+## Static/PWA standalone and the php-wasm escape hatch
+
+`srcdoc` is **removed** as an authored-content transport. A pure serverless
+static/PWA standalone editor keeps the existing **Service Worker** preview,
+gated as `static-service-worker` (`opaqueSafe = false`) — a *trusted-content*
+compatibility mode, **not** a security boundary, and never auto-selected in an
+embedded context.
+
+The php-wasm **Playground** (the whole CMS emulated by a Service Worker) cannot
+serve opaque content at all, so its **published-content** demos fall back to the
+dev-only `EXELEARNING_UNSAFE_LEGACY_IFRAME` hatch
+(`IframeSandbox::isUnsafeLegacy()`, `blueprint.json`) — off by default, never a
+UI/admin setting. The **editor preview** inside the playground has no such hatch:
+with `srcdoc` gone and no real HTTP origin behind the SW, it **fails closed with
+a clear error**. That is the intended dev-only behavior — previewing authored
+content in the playground editor requires a real server-backed deployment.
 
 See also: `src/Controller/ContentController.php`,
 `src/Service/IframeSandbox.php`, and eXe core

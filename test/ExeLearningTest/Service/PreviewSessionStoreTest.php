@@ -146,6 +146,25 @@ class PreviewSessionStoreTest extends TestCase
         $this->assertStringContainsString('Silence is golden', file_get_contents($index));
     }
 
+    public function testShippedNginxSamplesDenyDirectAccessToThePreviewStore(): void
+    {
+        // Apache reads the store's .htaccess deny guard; nginx does not. The
+        // shipped nginx samples MUST therefore deny /files/exelearning-preview/
+        // directly, or a raw GET would serve untrusted author HTML same-origin
+        // without the sandbox CSP (the -preview/ prefix is NOT covered by the
+        // pre-existing /files/exelearning/ rule).
+        $repoRoot = dirname(__DIR__, 3);
+        foreach (['/data/nginx-exelearning.conf', '/docker/nginx-exelearning.conf'] as $rel) {
+            $this->assertFileExists($repoRoot . $rel);
+            $conf = (string) file_get_contents($repoRoot . $rel);
+            $this->assertStringContainsString(
+                '/files/exelearning-preview/',
+                $conf,
+                $rel . ' must deny direct access to the preview session store'
+            );
+        }
+    }
+
     public function testAccessGuardIsWrittenIdempotentlyAndNotClobbered(): void
     {
         $store = $this->store();

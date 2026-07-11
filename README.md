@@ -41,13 +41,25 @@ location ^~ /files/exelearning/ {
     return 403;
 }
 
+# Block direct access to the ephemeral editor-preview session store.
+# REQUIRED on nginx (and any non-Apache server): these bytes are only meant to
+# be served through the opaque-origin preview capability URL with a sandbox CSP;
+# a direct hit would leak untrusted author HTML same-origin without that CSP.
+location ^~ /files/exelearning-preview/ {
+    return 403;
+}
+
 # Route content proxy to PHP
 location ^~ /exelearning/content/ {
     try_files $uri /index.php$is_args$args;
 }
 ```
 
-Apache is supported automatically via the included `.htaccess` file.
+Apache is supported automatically via the included `.htaccess` deny guards
+(one for the extracted-content store, one written into the preview session
+store). **Non-Apache deployments MUST deny direct web access to both
+`{file_store}/exelearning` and `{file_store}/exelearning-preview`** — nginx and
+other servers do not read `.htaccess`.
 
 ### From Source (Development)
 
