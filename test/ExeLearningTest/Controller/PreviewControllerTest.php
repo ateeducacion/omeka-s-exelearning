@@ -381,6 +381,7 @@ class PreviewControllerTest extends TestCase
             'text/html',
             'image/svg+xml',
             'application/xml',
+            'text/xml',
             'application/xhtml+xml',
             'text/html; charset=utf-8',
             'IMAGE/SVG+XML',

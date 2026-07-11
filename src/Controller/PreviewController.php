@@ -287,7 +287,8 @@ class PreviewController extends AbstractActionController
 
     /**
      * Whether a MIME type executes script when opened top-level or framed:
-     * text/html, image/svg+xml, application/xml, application/xhtml+xml.
+     * text/html, image/svg+xml, application/xml, text/xml,
+     * application/xhtml+xml. Mirrors eXe core isScriptableDocumentType().
      *
      * @param string $mime
      * @return bool
@@ -298,6 +299,7 @@ class PreviewController extends AbstractActionController
         return strpos($mime, 'text/html') === 0
             || strpos($mime, 'image/svg+xml') === 0
             || strpos($mime, 'application/xml') === 0
+            || strpos($mime, 'text/xml') === 0
             || strpos($mime, 'application/xhtml+xml') === 0;
     }
 
