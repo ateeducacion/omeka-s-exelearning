@@ -31,6 +31,12 @@ use Laminas\Validator\Csrf as CsrfValidator;
  * long editing session keeps previewing. It is defense-in-depth only: the
  * management API additionally requires a logged-in identity and owner-scoped
  * session access.
+ *
+ * Minting AND validation go through the single {@see validator()} factory so
+ * their options (name + `timeout => null`) can never drift apart — a validator
+ * with a divergent name would look in the wrong session namespace, and a
+ * divergent finite timeout would re-introduce the container-global expiry this
+ * class exists to avoid.
  */
 final class PreviewCsrf
 {
@@ -38,12 +44,20 @@ final class PreviewCsrf
     public const NAME = 'exelearning-preview';
 
     /**
+     * The single source of truth for the preview CSRF validator: the dedicated
+     * namespace and `timeout => null` (no absolute expiry). Both mint and
+     * validate build their validator here so they can never diverge.
+     */
+    public static function validator(): CsrfValidator
+    {
+        return new CsrfValidator(['name' => self::NAME, 'timeout' => null]);
+    }
+
+    /**
      * Mint a session-lifetime preview CSRF token (a `token-tokenId` hash).
-     *
-     * @codeCoverageIgnore Requires a live session container (admin runtime).
      */
     public static function mint(): string
     {
-        return (new CsrfValidator(['name' => self::NAME, 'timeout' => null]))->getHash();
+        return self::validator()->getHash();
     }
 }

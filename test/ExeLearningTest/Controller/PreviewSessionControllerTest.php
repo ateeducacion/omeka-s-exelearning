@@ -646,6 +646,21 @@ class PreviewSessionControllerTest extends TestCase
         $this->assertStringContainsString('CSRF', $result->getVariables()['error']);
     }
 
+    public function testCsrfTokenIsValidRejectsUnknownTokenViaPreviewNamespace(): void
+    {
+        // Real validation path: an unknown token in the dedicated preview CSRF
+        // namespace is rejected. (Lifetime/acceptance is proven in PreviewCsrfTest
+        // against a clock-controlled container.)
+        $controller = new class ($this->store) extends PreviewSessionController {
+            public function exposeCsrfTokenIsValid(string $token): bool
+            {
+                return $this->csrfTokenIsValid($token);
+            }
+        };
+
+        $this->assertFalse($controller->exposeCsrfTokenIsValid('bogus-unknown-token'));
+    }
+
     // =========================================================================
     // helpers
     // =========================================================================
