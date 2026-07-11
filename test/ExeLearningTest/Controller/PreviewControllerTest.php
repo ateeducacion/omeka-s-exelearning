@@ -122,8 +122,10 @@ class PreviewControllerTest extends TestCase
         $response = $controller->serveAction();
 
         $this->assertSame(302, $response->getStatusCode());
+        // A RELATIVE Location (no leading slash) — resolves to
+        // …/{previewId}/index.html against the bare URL, base-path/app:// safe.
         $this->assertSame(
-            '/exelearning/preview/' . self::VALID_UUID . '/index.html',
+            self::VALID_UUID . '/index.html',
             $response->getHeaders()->get('Location')->getFieldValue()
         );
         $this->assertBaseHardening($response);
@@ -142,8 +144,9 @@ class PreviewControllerTest extends TestCase
         $response = $controller->serveAction();
 
         $this->assertSame(302, $response->getStatusCode());
+        // Trailing slash → relative Location appends → resolves to …/index.html.
         $this->assertSame(
-            '/exelearning/preview/' . self::VALID_UUID . '/index.html',
+            'index.html',
             $response->getHeaders()->get('Location')->getFieldValue()
         );
     }
@@ -160,7 +163,7 @@ class PreviewControllerTest extends TestCase
 
         $this->assertSame(302, $response->getStatusCode());
         $this->assertSame(
-            '/exelearning/preview/' . self::VALID_UUID . '/index.html?exe-teacher=1&v=3',
+            self::VALID_UUID . '/index.html?exe-teacher=1&v=3',
             $response->getHeaders()->get('Location')->getFieldValue()
         );
     }

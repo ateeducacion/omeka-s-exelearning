@@ -329,7 +329,11 @@ class PreviewController extends AbstractActionController
         if ($rest !== '' && $rest !== '/') {
             return null; // an explicit file follows — serve it, don't redirect.
         }
-        $location = rtrim($path, '/') . '/index.html';
+        // A RELATIVE Location (base-path / origin / app:// safe) resolved against
+        // the bare request URL: with no trailing slash the browser replaces the
+        // last segment ({previewId}) → `{previewId}/index.html`; with a trailing
+        // slash it appends → `index.html`.
+        $location = $rest === '/' ? 'index.html' : $previewId . '/index.html';
         if (method_exists($uri, 'getQuery')) {
             $query = $uri->getQuery();
             if (is_string($query) && $query !== '') {

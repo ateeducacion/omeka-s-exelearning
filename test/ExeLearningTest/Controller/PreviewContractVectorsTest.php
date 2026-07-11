@@ -185,13 +185,9 @@ class PreviewContractVectorsTest extends TestCase
 
         $controller = new PreviewController($this->store);
         $controller->setRouteParams(['previewId' => $previewId, 'file' => $file]);
-        // Always drive the controller with a request carrying the real URI path
-        // AND any headers: the bare-capability-URL redirect (§4) reads the path,
-        // not the route's file=index.html default.
-        // TODO(re-vendor): the shared vectors.json will gain bare-root (302) and
-        // malformed/multi/non-bytes Range (200-full) steps once core re-vendors
-        // the §4 deltas; this harness already routes the path + query so those
-        // steps replay without forking the JSON.
+        // Drive the controller with a request carrying the real URI path AND any
+        // headers: the bare-capability-URL redirect step (§4) reads the request
+        // path, not the route's file=index.html default.
         $controller->setRequest($this->serveRequest($rawPath, $query, $step['request']['headers'] ?? []));
         $response = $controller->serveAction();
 
@@ -199,7 +195,7 @@ class PreviewContractVectorsTest extends TestCase
         if (isset($step['expect']['bodyText'])) {
             $this->assertSame($step['expect']['bodyText'], $response->getContent(), 'bodyText for ' . $step['id']);
         }
-        $this->assertHeaders($step, $response->getHeaders());
+        $this->assertHeaders($step, $response->getHeaders(), $previewId);
     }
 
     /**
@@ -245,8 +241,10 @@ class PreviewContractVectorsTest extends TestCase
     /**
      * @param array $step
      * @param \Laminas\Http\Headers $headers
+     * @param string $previewId Substituted into expected header values (e.g. the
+     *                          bare-root redirect's `{previewId}/index.html`).
      */
-    private function assertHeaders(array $step, $headers): void
+    private function assertHeaders(array $step, $headers, string $previewId): void
     {
         foreach ($step['expect']['headers'] ?? [] as $name => $matcher) {
             $header = $headers->get($name);
@@ -257,13 +255,19 @@ class PreviewContractVectorsTest extends TestCase
             $this->assertNotNull($header, "$name must be present in " . $step['id']);
             $value = $header->getFieldValue();
             if (is_string($matcher)) {
-                $this->assertSame($matcher, $value, "$name in " . $step['id']);
+                $this->assertSame($this->subst($matcher, $previewId), $value, "$name in " . $step['id']);
             } elseif (isset($matcher['startsWith'])) {
-                $this->assertStringStartsWith($matcher['startsWith'], $value, "$name in " . $step['id']);
+                $this->assertStringStartsWith($this->subst($matcher['startsWith'], $previewId), $value, "$name in " . $step['id']);
             } elseif (isset($matcher['contains'])) {
-                $this->assertStringContainsString($matcher['contains'], $value, "$name in " . $step['id']);
+                $this->assertStringContainsString($this->subst($matcher['contains'], $previewId), $value, "$name in " . $step['id']);
             }
         }
+    }
+
+    /** Substitute the {previewId} placeholder in an expected matcher value. */
+    private function subst(string $value, string $previewId): string
+    {
+        return str_replace('{previewId}', $previewId, $value);
     }
 
     // =========================================================================

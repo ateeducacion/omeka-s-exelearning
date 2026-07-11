@@ -113,10 +113,12 @@ and only the server-controlled manifest path reaches the filesystem (with
 containment checks) for the fixed layer.
 
 - **Bare capability URL.** A `GET` to `…/{previewId}` or `…/{previewId}/` (no
-  file) **302-redirects** to `…/{previewId}/index.html` (query string
-  preserved); it never serves `index.html` bytes at the bare URL. The redirect
-  is driven by the actual request path, so an explicit `…/index.html` still
-  serves `200`.
+  file) **302-redirects** to the entry document; it never serves `index.html`
+  bytes at the bare URL. The `Location` is **relative** (base-path / origin /
+  `app://` safe) so it resolves against the bare URL: no trailing slash →
+  `{previewId}/index.html`, trailing slash → `index.html` (query string
+  preserved). The redirect is driven by the actual request path, so an explicit
+  `…/index.html` still serves `200`.
 - **Range requests.** Session-asset responses advertise `Accept-Ranges: bytes`.
   A single **satisfiable** range → `206`; a syntactically valid but
   **unsatisfiable** single range (start at/after the end, or a zero-length
