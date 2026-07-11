@@ -22,6 +22,8 @@ return [
             Controller\ApiController::class => Controller\ApiControllerFactory::class,
             Controller\EditorController::class => Controller\EditorControllerFactory::class,
             Controller\ContentController::class => Controller\ContentControllerFactory::class,
+            Controller\PreviewController::class => Controller\PreviewControllerFactory::class,
+            Controller\PreviewSessionController::class => Controller\PreviewSessionControllerFactory::class,
             Controller\StylesServeController::class => Controller\StylesServeControllerFactory::class,
             Controller\Admin\StylesController::class => Controller\Admin\StylesControllerFactory::class,
         ],
@@ -29,6 +31,8 @@ return [
             'ExeLearning\Controller\Editor' => Controller\EditorController::class,
             'ExeLearning\Controller\Api' => Controller\ApiController::class,
             'ExeLearning\Controller\Content' => Controller\ContentController::class,
+            'ExeLearning\Controller\Preview' => Controller\PreviewController::class,
+            'ExeLearning\Controller\PreviewSession' => Controller\PreviewSessionController::class,
             'ExeLearning\Controller\StylesServe' => Controller\StylesServeController::class,
             'ExeLearning\Controller\Admin\Styles' => Controller\Admin\StylesController::class,
         ],
@@ -38,6 +42,8 @@ return [
         'factories' => [
             Service\ElpFileService::class => Service\ElpFileServiceFactory::class,
             Service\StylesService::class => Service\StylesServiceFactory::class,
+            Service\PreviewFixedResources::class => Service\PreviewFixedResourcesFactory::class,
+            Service\PreviewSessionStore::class => Service\PreviewSessionStoreFactory::class,
         ],
     ],
 
@@ -75,6 +81,22 @@ return [
                     'defaults' => [
                         '__NAMESPACE__' => 'ExeLearning\Controller',
                         'controller' => 'Content',
+                        'action' => 'serve',
+                        'file' => 'index.html',
+                    ],
+                ],
+            ],
+            // Authless capability URL that serves the opaque editor preview
+            // (serving contract v2). Gated only on the unguessable previewId +
+            // idle TTL; never depends on the admin session cookie.
+            'exelearning-preview' => [
+                'type' => Regex::class,
+                'options' => [
+                    'regex' => '/exelearning/preview/(?<previewId>[0-9a-f-]{36})(?:/(?<file>.*))?',
+                    'spec' => '/exelearning/preview/%previewId%/%file%',
+                    'defaults' => [
+                        '__NAMESPACE__' => 'ExeLearning\Controller',
+                        'controller' => 'Preview',
                         'action' => 'serve',
                         'file' => 'index.html',
                     ],
@@ -168,6 +190,58 @@ return [
                             'route' => '/install-editor-status',
                             'defaults' => [
                                 'action' => 'installEditorStatus',
+                            ],
+                        ],
+                    ],
+                    // Authenticated, owner-scoped preview-session management API
+                    // (serving contract v2). The serving route is separate and
+                    // authless (see exelearning-preview above).
+                    'preview-session-create' => [
+                        'type' => Literal::class,
+                        'options' => [
+                            'route' => '/preview-session',
+                            'defaults' => [
+                                'controller' => 'PreviewSession',
+                                'action' => 'create',
+                            ],
+                        ],
+                    ],
+                    'preview-session-assets' => [
+                        'type' => Segment::class,
+                        'options' => [
+                            'route' => '/preview-session/:id/assets',
+                            'constraints' => [
+                                'id' => '[0-9a-f-]{36}',
+                            ],
+                            'defaults' => [
+                                'controller' => 'PreviewSession',
+                                'action' => 'assets',
+                            ],
+                        ],
+                    ],
+                    'preview-session-revisions' => [
+                        'type' => Segment::class,
+                        'options' => [
+                            'route' => '/preview-session/:id/revisions',
+                            'constraints' => [
+                                'id' => '[0-9a-f-]{36}',
+                            ],
+                            'defaults' => [
+                                'controller' => 'PreviewSession',
+                                'action' => 'revisions',
+                            ],
+                        ],
+                    ],
+                    'preview-session-delete' => [
+                        'type' => Segment::class,
+                        'options' => [
+                            'route' => '/preview-session/:id',
+                            'constraints' => [
+                                'id' => '[0-9a-f-]{36}',
+                            ],
+                            'defaults' => [
+                                'controller' => 'PreviewSession',
+                                'action' => 'delete',
                             ],
                         ],
                     ],

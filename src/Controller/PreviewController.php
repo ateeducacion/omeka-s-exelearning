@@ -3,39 +3,36 @@ declare(strict_types=1);
 
 namespace ExeLearning\Controller;
 
+use ExeLearning\Service\PreviewSessionStore;
 use Laminas\Http\Response as HttpResponse;
 use Laminas\Mvc\Controller\AbstractActionController;
 
 /**
  * Host-served opaque HTTP preview — capability serving route (Omeka S adapter).
  *
- * Mirrors the eXeLearning canonical contract in eXe core
- * doc/development/preview-serving-contract.md (the single source of truth). This
- * is the Omeka S implementation of the contract's "serving route (authless
- * capability URL)": it serves the editor preview of UNTRUSTED author HTML/JS in
- * an opaque origin over a real, cookieless capability URL.
+ * Implements the eXeLearning canonical preview serving contract v2
+ * (doc/development/preview-serving-contract.md in eXe core, mirrored in this
+ * repo under docs/preview-serving-contract.md). It serves the editor preview of
+ * UNTRUSTED author HTML/JS in an opaque origin over a real, cookieless
+ * capability URL.
  *
  * It is the preview twin of ContentController (the published-content proxy):
  * the same Laminas serving primitive (Response + addHeaderLine + traversal-safe
  * path normalization + 404), the same opaque-origin philosophy, and the same
- * sandbox token set as ExeLearning\Service\IframeSandbox (secure tokens
- * "allow-scripts allow-popups allow-forms"). It differs from ContentController
- * in exactly one way: it resolves bytes from an ephemeral, content-addressed
- * PREVIEW SESSION STORE keyed by an unguessable previewId (server-minted UUID)
- * plus an idle TTL — never from the real filesystem — so a live editor preview
- * never has to be published first.
+ * sandbox token set as ExeLearning\Service\IframeSandbox. It differs in the
+ * lookup: bytes resolve from an ephemeral PreviewSessionStore keyed by an
+ * unguessable previewId (a server-minted UUID) + idle TTL — never from the real
+ * filesystem for documents/assets, and only through the fixed-resource manifest
+ * (server-controlled data) for the fixed layer.
  *
- * IMPORTANT: self::PREVIEW_SANDBOX_CSP below MUST stay BYTE-IDENTICAL to eXe
- * core's previewCspHeader() (src/shared/security/previewSandbox.ts). Do not
- * reformat, reorder, or "profile" it here; add a drift check that compares it
- * against core.
+ * Three-layer resolution (active revision only): documents → assetRefs→assets →
+ * fixedRefs→manifest → 404. Cache-Control is tiered by layer (documents
+ * no-store; assets no-cache + ETag/Range/304; fixed private,max-age). The
+ * sandbox-first CSP is emitted on EVERY scriptable document type from ANY layer.
  *
- * FOLLOW-UP (intentionally out of this skeleton): the PreviewSessionStore
- * (content-addressed, server-side re-hash, atomic manifest swap, per-session +
- * global byte/file caps, idle-TTL sweeper), the authenticated owner-scoped
- * management API (POST /api/exelearning/preview-session ...), the
- * PreviewControllerFactory + route wiring in config/module.config.php, and the
- * PHPUnit coverage in test/ExeLearningTest/Controller/PreviewControllerTest.php.
+ * IMPORTANT: self::PREVIEW_SANDBOX_CSP MUST stay BYTE-IDENTICAL to eXe core's
+ * previewCspHeader() (src/shared/security/previewSandbox.ts). Do not reformat,
+ * reorder, or "profile" it; the drift check in PreviewControllerTest asserts it.
  *
  * @license AGPL-3.0
  */
@@ -75,6 +72,7 @@ class PreviewController extends AbstractActionController
         'xml' => 'application/xml',
         'css' => 'text/css',
         'js' => 'application/javascript',
+        'mjs' => 'text/javascript',
         'json' => 'application/json',
         'png' => 'image/png',
         'jpg' => 'image/jpeg',
@@ -94,6 +92,19 @@ class PreviewController extends AbstractActionController
         'txt' => 'text/plain',
     ];
 
+    /** @var PreviewSessionStore|null Ephemeral session store (null in helper unit tests). */
+    private ?PreviewSessionStore $store;
+
+    /**
+     * @param PreviewSessionStore|null $store Injected by the factory in Omeka;
+     *                                        null when only the pure helpers are
+     *                                        unit-tested.
+     */
+    public function __construct(?PreviewSessionStore $store = null)
+    {
+        $this->store = $store;
+    }
+
     /**
      * Serve one file of a preview session by capability id.
      *
@@ -109,76 +120,122 @@ class PreviewController extends AbstractActionController
             return $this->preview404();
         }
 
-        // 2) Traversal-safe normalization for the exact-key manifest lookup.
+        // 2) Traversal-safe normalization for the exact-key layer lookup.
         $path = $this->normalizePath($relPath);
         if ($path === null) {
             return $this->preview404();
         }
 
-        // 3) Resolve bytes from the ACTIVE manifest of the ephemeral session
-        //    store. The real lookup must touch the idle-TTL clock and return
-        //    null for an unknown/expired session; the store is content-addressed
-        //    and re-hashes every blob on upload, so this is an exact-key store
-        //    read that MUST NOT hit the real filesystem.
-        //
-        // TODO(follow-up): inject ExeLearning\Service\PreviewSessionStore via a
-        // PreviewControllerFactory and replace the stub below with, e.g.:
-        //   $file = $this->store->getForServing($previewId)?->activeManifest()?->get($path);
+        // 3) Three-layer resolution against the active revision only. The store
+        //    never lets a client path do filesystem arithmetic; documents/assets
+        //    are exact-key reads and the fixed layer resolves through the
+        //    server-controlled manifest.
         $file = $this->lookupPreviewFile($previewId, $path);
         if ($file === null) {
             return $this->preview404();
         }
 
-        $mime = $file['mime'] ?? $this->mimeFor($path);
+        $mime = $this->contentTypeFor($path);
+        $kind = (string) ($file['kind'] ?? 'document');
+        $bytes = (string) ($file['bytes'] ?? '');
 
+        if ($kind === 'asset') {
+            return $this->serveAsset($bytes, $mime, (string) ($file['etag'] ?? ''));
+        }
+
+        // Documents (no-store) and fixed resources (immutable, long-lived).
         $response = new HttpResponse();
         $response->setStatusCode(200);
         $headers = $response->getHeaders();
         $this->applyBaseHeaders($headers, $mime);
-
-        // Sandbox-first CSP on EVERY scriptable document type (not just
-        // text/html): an author SVG/XML opened top-level would otherwise run its
-        // inline script same-origin. nosniff does not help for image/svg+xml.
-        if ($this->isScriptableDocument($mime)) {
-            $headers->addHeaderLine('Content-Security-Policy', self::PREVIEW_SANDBOX_CSP);
-        }
-
-        $response->setContent($file['bytes']);
+        $headers->addHeaderLine(
+            'Cache-Control',
+            $kind === 'fixed' ? 'private, max-age=31536000' : 'no-store'
+        );
+        $this->addSandboxCspIfScriptable($headers, $mime);
+        $headers->addHeaderLine('Content-Length', (string) strlen($bytes));
+        $response->setContent($bytes);
         return $response;
     }
 
     /**
-     * TODO(follow-up): real content-addressed preview session-store lookup.
+     * Serve a session project asset (layer 2): revalidating cache tier with an
+     * `ETag: "<assetKey>"`, `If-None-Match` -> 304, and single-range 206/416 so
+     * large audio/video seek without a full re-download.
      *
-     * Must return the active-manifest entry for ($previewId, $path) as
-     * ['bytes' => string, 'mime' => string], or null when the session is
-     * unknown/expired or the path is not in the active manifest. Until the store
-     * lands, this stub returns null, so every capability URL 404s (still with the
-     * correct hardening headers) — the safe default.
+     * @param string $bytes
+     * @param string $mime
+     * @param string $etag  The assetKey (opaque immutable content identity).
+     * @return HttpResponse
+     */
+    private function serveAsset(string $bytes, string $mime, string $etag): HttpResponse
+    {
+        $response = new HttpResponse();
+        $headers = $response->getHeaders();
+        $this->applyBaseHeaders($headers, $mime);
+        $headers->addHeaderLine('Cache-Control', 'no-cache');
+        $headers->addHeaderLine('ETag', '"' . $etag . '"');
+        $headers->addHeaderLine('Accept-Ranges', 'bytes');
+        // A scriptable asset (an author SVG) opened top-level must stay opaque.
+        $this->addSandboxCspIfScriptable($headers, $mime);
+
+        if ($this->ifNoneMatchMatches($this->requestHeader('If-None-Match'), $etag)) {
+            $response->setStatusCode(304);
+            return $response;
+        }
+
+        $total = strlen($bytes);
+        $range = $this->parseRange($this->requestHeader('Range'), $total);
+        if ($range === 'unsatisfiable') {
+            $response->setStatusCode(416);
+            $headers->addHeaderLine('Content-Range', 'bytes */' . $total);
+            return $response;
+        }
+        if (is_array($range)) {
+            $slice = substr($bytes, $range['start'], $range['end'] - $range['start'] + 1);
+            $response->setStatusCode(206);
+            $headers->addHeaderLine(
+                'Content-Range',
+                'bytes ' . $range['start'] . '-' . $range['end'] . '/' . $total
+            );
+            $headers->addHeaderLine('Content-Length', (string) strlen($slice));
+            $response->setContent($slice);
+            return $response;
+        }
+
+        $response->setStatusCode(200);
+        $headers->addHeaderLine('Content-Length', (string) $total);
+        $response->setContent($bytes);
+        return $response;
+    }
+
+    /**
+     * Three-layer store lookup for the serving route. Returns a descriptor
+     * `['kind' => 'document'|'asset'|'fixed', 'bytes' => string, 'etag'? =>
+     * string]`, or null on a miss (unknown/expired session, no active revision,
+     * or a path resolving to nothing).
      *
-     * Declared `protected` (not `private`) so the follow-up
-     * PreviewControllerFactory can inject a real PreviewSessionStore by
-     * subclassing/overriding this single seam, and so unit tests can exercise
-     * the serving success path without a live store — mirroring the overridable
-     * seams used by the sibling controllers.
+     * Declared `protected` so unit tests can exercise the serving success path
+     * without a live store by overriding this single seam.
      *
      * @param string $previewId Validated capability UUID.
-     * @param string $path      Normalized, traversal-safe manifest key.
-     * @return array{bytes: string, mime: string}|null
+     * @param string $path      Normalized, traversal-safe key.
+     * @return array{kind: string, bytes: string, etag?: string}|null
      */
     protected function lookupPreviewFile(string $previewId, string $path): ?array
     {
-        // Intentionally unresolved until PreviewSessionStore is implemented.
-        return null;
+        if ($this->store === null) {
+            return null;
+        }
+        return $this->store->resolveForServing($previewId, $path);
     }
 
     /**
      * Hardening headers emitted on EVERY preview response, including 404s
-     * (verbatim from the canonical contract). There is deliberately NO
-     * X-Frame-Options: framing is governed by the CSP frame-ancestors directive,
-     * and the opaque preview is meant to be framed by the editor. ACAO:* is safe
-     * because the route is authless/cookieless — never pair it with
-     * Access-Control-Allow-Credentials.
+     * (verbatim from the canonical contract). Cache-Control is deliberately NOT
+     * here — it is tiered per layer by the caller. There is deliberately NO
+     * X-Frame-Options: framing is governed by the CSP frame-ancestors directive.
+     * ACAO:* is safe because the route is authless/cookieless.
      *
      * @param \Laminas\Http\Headers $headers
      * @param string $mime
@@ -188,12 +245,26 @@ class PreviewController extends AbstractActionController
         $headers->addHeaderLine('Content-Type', $mime);
         $headers->addHeaderLine('X-Content-Type-Options', 'nosniff');
         $headers->addHeaderLine('Referrer-Policy', 'no-referrer');
-        $headers->addHeaderLine('Cache-Control', 'no-store');
         $headers->addHeaderLine(
             'Permissions-Policy',
             'camera=(), microphone=(), geolocation=(), payment=()'
         );
         $headers->addHeaderLine('Access-Control-Allow-Origin', '*');
+    }
+
+    /**
+     * Attach the sandbox-first CSP when the MIME is a scriptable document type.
+     * An author SVG/XML opened top-level would otherwise run its inline script
+     * same-origin; nosniff does not help for image/svg+xml.
+     *
+     * @param \Laminas\Http\Headers $headers
+     * @param string $mime
+     */
+    private function addSandboxCspIfScriptable($headers, string $mime): void
+    {
+        if ($this->isScriptableDocument($mime)) {
+            $headers->addHeaderLine('Content-Security-Policy', self::PREVIEW_SANDBOX_CSP);
+        }
     }
 
     /**
@@ -207,16 +278,16 @@ class PreviewController extends AbstractActionController
     {
         $response = new HttpResponse();
         $response->setStatusCode(404);
-        $this->applyBaseHeaders($response->getHeaders(), 'text/plain');
+        $headers = $response->getHeaders();
+        $this->applyBaseHeaders($headers, 'text/plain');
+        $headers->addHeaderLine('Cache-Control', 'no-store');
         $response->setContent('Not found');
         return $response;
     }
 
     /**
      * Whether a MIME type executes script when opened top-level or framed:
-     * text/html, image/svg+xml, application/xml, application/xhtml+xml. This is a
-     * superset of ContentController::isActiveDocumentType() — the preview CSP
-     * must cover every scriptable type, per the contract.
+     * text/html, image/svg+xml, application/xml, application/xhtml+xml.
      *
      * @param string $mime
      * @return bool
@@ -231,35 +302,40 @@ class PreviewController extends AbstractActionController
     }
 
     /**
-     * Traversal-safe path normalization for the exact-key manifest lookup.
-     * Mirrors ContentController::sanitizePath(): strip null bytes, normalize
-     * slashes, drop empty/"." segments, reject any "..", default to index.html.
+     * Traversal-safe path normalization for the exact-key layer lookup.
+     * Delegates to the single source of truth on PreviewSessionStore so the
+     * serving route and the revision validator normalize identically.
      *
      * @param string $path
      * @return string|null Normalized key, or null if it tries to escape.
      */
     private function normalizePath(string $path): ?string
     {
-        $path = urldecode($path);
-        $path = str_replace(["\0", '\\'], ['', '/'], $path);
-
-        $parts = [];
-        foreach (explode('/', $path) as $seg) {
-            if ($seg === '' || $seg === '.') {
-                continue;
-            }
-            if ($seg === '..') {
-                return null;
-            }
-            $parts[] = $seg;
-        }
-
-        return $parts === [] ? 'index.html' : implode('/', $parts);
+        return PreviewSessionStore::normalizePath($path);
     }
 
     /**
-     * Extension -> MIME fallback. The store record should carry the real,
-     * server-computed MIME; this is only used when it does not.
+     * Resolve the served Content-Type for a path, appending a UTF-8 charset to
+     * textual types (mirrors eXe core contentTypeFor) so responses paired with
+     * nosniff stay strict and readable.
+     *
+     * @param string $path
+     * @return string
+     */
+    private function contentTypeFor(string $path): string
+    {
+        $mime = $this->mimeFor($path);
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $isTextual = strpos($mime, 'text/') === 0
+            || in_array($ext, ['js', 'mjs', 'json', 'svg', 'xml'], true);
+        if ($isTextual && strpos($mime, 'charset') === false) {
+            $mime .= '; charset=utf-8';
+        }
+        return $mime;
+    }
+
+    /**
+     * Extension -> base MIME fallback.
      *
      * @param string $path
      * @return string
@@ -268,5 +344,95 @@ class PreviewController extends AbstractActionController
     {
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         return self::MIME_TYPES[$ext] ?? 'application/octet-stream';
+    }
+
+    /**
+     * Read a request header value, tolerating a stub/absent request object.
+     *
+     * @param string $name
+     * @return string|null
+     */
+    private function requestHeader(string $name): ?string
+    {
+        $request = $this->getRequest();
+        if (!method_exists($request, 'getHeaders')) {
+            return null;
+        }
+        $headers = $request->getHeaders();
+        if (!$headers || !method_exists($headers, 'get')) {
+            return null;
+        }
+        $header = $headers->get($name);
+        if (!$header || !method_exists($header, 'getFieldValue')) {
+            return null;
+        }
+        return $header->getFieldValue();
+    }
+
+    /**
+     * Loose If-None-Match evaluation: any listed entity tag (or `*`) matches.
+     *
+     * @param string|null $headerValue
+     * @param string $etag
+     * @return bool
+     */
+    private function ifNoneMatchMatches(?string $headerValue, string $etag): bool
+    {
+        if ($headerValue === null || $headerValue === '') {
+            return false;
+        }
+        foreach (explode(',', $headerValue) as $candidate) {
+            $cleaned = trim($candidate);
+            $cleaned = (string) preg_replace('/^W\//i', '', $cleaned);
+            $cleaned = trim($cleaned, '"');
+            if ($cleaned === '*' || $cleaned === $etag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Parse a single-range `Range` header against a body of `$total` bytes.
+     * Returns null when no range was requested, an inclusive `{start, end}`
+     * window when satisfiable, or the string `'unsatisfiable'` for anything else
+     * (multi-range, malformed, out of bounds) — the contract answers those 416.
+     *
+     * @param string|null $value
+     * @param int $total
+     * @return array{start: int, end: int}|string|null
+     */
+    private function parseRange(?string $value, int $total)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (!preg_match('/^bytes=(\d*)-(\d*)$/', trim($value), $matches)) {
+            return 'unsatisfiable';
+        }
+        $rawStart = $matches[1];
+        $rawEnd = $matches[2];
+        if ($rawStart === '' && $rawEnd === '') {
+            return 'unsatisfiable';
+        }
+        if ($rawStart === '') {
+            $suffix = (int) $rawEnd;
+            if ($suffix === 0 || $total === 0) {
+                return 'unsatisfiable';
+            }
+            return ['start' => max(0, $total - $suffix), 'end' => $total - 1];
+        }
+        $start = (int) $rawStart;
+        if ($start >= $total) {
+            return 'unsatisfiable';
+        }
+        if ($rawEnd === '') {
+            return ['start' => $start, 'end' => $total - 1];
+        }
+        $end = (int) $rawEnd;
+        if ($end < $start) {
+            return 'unsatisfiable';
+        }
+        return ['start' => $start, 'end' => min($end, $total - 1)];
     }
 }
