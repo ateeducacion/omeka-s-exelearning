@@ -101,6 +101,26 @@ final class PreviewSessionStore
         };
     }
 
+    /**
+     * Bytes an owned session may still accept (maxBytesPerSession minus what it
+     * already holds), or null when the session is unknown or not owned by
+     * `$ownerId`. The management API uses it to reject an oversized upload on its
+     * DECLARED sizes BEFORE buffering any part into memory (the contract's
+     * declared-then-actual two-stage budget).
+     *
+     * @param string $previewId
+     * @param int    $ownerId
+     * @return int|null
+     */
+    public function remainingSessionBudget(string $previewId, int $ownerId): ?int
+    {
+        $meta = $this->ownedMeta($previewId, $ownerId);
+        if (isset($meta['status'])) {
+            return null;
+        }
+        return $this->limits['maxBytesPerSession'] - $this->sessionBytes($this->sessionDir($previewId));
+    }
+
     /** The limits a create-session response advertises to the client. */
     public function advertisedLimits(): array
     {

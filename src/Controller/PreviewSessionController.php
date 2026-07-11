@@ -78,6 +78,20 @@ class PreviewSessionController extends AbstractActionController
         if (!is_array($entries) || $this->hasInvalidAssetEntries($entries)) {
             return $this->error(400, 'assets must be an array of { key, size } entries');
         }
+
+        // Declared-size budget: reject an oversized batch on its declared sizes
+        // BEFORE buffering any part into memory (the actual-byte budget is then
+        // enforced per entry in the store). Skipped when the session is not owned
+        // by this user, so storeAssets still returns the proper 403/404 below.
+        $declared = 0;
+        foreach ($entries as $entry) {
+            $declared += (int) $entry['size'];
+        }
+        $remaining = $this->store->remainingSessionBudget($this->previewId(), $this->ownerId());
+        if ($remaining !== null && $declared > $remaining) {
+            return $this->error(413, 'Upload exceeds the preview session byte budget');
+        }
+
         $bytes = $this->collectFileBytes($request);
         if ($bytes === null || count($bytes) !== count($entries)) {
             return $this->error(400, 'assets and files must be index-aligned');

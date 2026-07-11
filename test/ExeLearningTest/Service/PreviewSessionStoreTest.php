@@ -274,6 +274,20 @@ class PreviewSessionStoreTest extends TestCase
         $this->assertSame(['status' => 404], $result);
     }
 
+    public function testRemainingSessionBudgetReflectsStoredAssets(): void
+    {
+        $store = $this->store(['maxBytesPerSession' => 1000]);
+        $id = $store->createSession(self::OWNER)['previewId'];
+        $this->assertSame(1000, $store->remainingSessionBudget($id, self::OWNER));
+
+        $store->storeAssets($id, self::OWNER, [$this->asset(self::PHOTO_KEY, str_repeat('x', 40))]);
+        $this->assertSame(960, $store->remainingSessionBudget($id, self::OWNER));
+
+        // Unknown session or wrong owner -> null (the caller must not leak status).
+        $this->assertNull($store->remainingSessionBudget($id, 999));
+        $this->assertNull($store->remainingSessionBudget('11111111-2222-4333-8444-555555555555', self::OWNER));
+    }
+
     // =========================================================================
     // applyRevision + resolveForServing (three-layer)
     // =========================================================================

@@ -242,6 +242,34 @@ class PreviewSessionControllerTest extends TestCase
         $this->assertSame([self::PHOTO_KEY], $result->getVariables()['stored']);
     }
 
+    public function testAssetsRejectsDeclaredOverBudgetBeforeBuffering(): void
+    {
+        // The declared-size total alone exceeds the session budget, so the
+        // controller must 413 BEFORE reading any uploaded part into memory.
+        $store = new PreviewSessionStore(
+            $this->base,
+            new PreviewFixedResources($this->distRoot),
+            ['maxBytesPerSession' => 5]
+        );
+        $id = $store->createSession(self::OWNER)['previewId'];
+        $controller = new class ($store) extends PreviewSessionController {
+            protected function validateCsrf($request): bool
+            {
+                return true;
+            }
+        };
+        $controller->setRequest($this->request([
+            'post' => ['assets' => json_encode([['key' => self::PHOTO_KEY, 'size' => 100]])],
+            'files' => [], // no parts buffered: the pre-check fires first
+        ]));
+        $controller->setIdentity($this->identity());
+        $controller->setRouteParams(['id' => $id]);
+
+        $controller->assetsAction();
+
+        $this->assertSame(413, $controller->getResponse()->getStatusCode());
+    }
+
     public function testAssetsRejectsMissingAssetsFieldWith400(): void
     {
         $id = $this->store->createSession(self::OWNER)['previewId'];
