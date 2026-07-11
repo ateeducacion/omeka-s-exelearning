@@ -452,9 +452,43 @@ class PreviewControllerTest extends TestCase
     public function unsatisfiableRangeProvider(): array
     {
         return [
-            'start-past-end' => ['bytes=99-'],
+            'open-ended-past-end' => ['bytes=99-'],
+            'closed-past-end' => ['bytes=99-100'],
             'zero-suffix' => ['bytes=-0'],
         ];
+    }
+
+    public function testServeActionDoesNotRedirectWhenUriLacksGetPath(): void
+    {
+        // A request whose getUri() cannot report a path must not trigger the
+        // bare-URL redirect: serve normally (defensive guard).
+        $request = new class {
+            public function getUri()
+            {
+                return new class {
+                    public function getScheme(): string
+                    {
+                        return 'https';
+                    }
+                };
+            }
+            public function getHeaders()
+            {
+                return new class {
+                    public function get($name)
+                    {
+                        return null;
+                    }
+                };
+            }
+        };
+        $controller = $this->servingController(['kind' => 'document', 'bytes' => '<html>ok</html>'], $request);
+        $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'index.html']);
+
+        $response = $controller->serveAction();
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertNull($response->getHeaders()->get('Location'));
     }
 
     public function testServeAssetOpenEndedRangeReturnsRemainder(): void
