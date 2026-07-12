@@ -29,9 +29,14 @@ class PreviewCsrfTest extends TestCase
         $validator = PreviewCsrf::validator();
 
         $this->assertInstanceOf(CsrfValidator::class, $validator);
-        $this->assertSame('exelearning-preview', $validator->getName());
+        $this->assertSame('exelearning_preview', $validator->getName());
         $this->assertNull($validator->getTimeout(), 'the preview validator must carry no absolute expiry');
-        $this->assertSame('exelearning-preview', PreviewCsrf::NAME);
+        $this->assertSame('exelearning_preview', PreviewCsrf::NAME);
+        $this->assertMatchesRegularExpression(
+            '/^[a-zA-Z0-9_\\\\]+$/',
+            PreviewCsrf::NAME,
+            'the namespace must be a valid Laminas session container name'
+        );
     }
 
     public function testMintProducesATokenIdHash(): void

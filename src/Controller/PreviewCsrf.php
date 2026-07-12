@@ -41,7 +41,7 @@ use Laminas\Validator\Csrf as CsrfValidator;
 final class PreviewCsrf
 {
     /** Dedicated Laminas CSRF session namespace for the preview token. */
-    public const NAME = 'exelearning-preview';
+    public const NAME = 'exelearning_preview';
 
     /**
      * The single source of truth for the preview CSRF validator: the dedicated

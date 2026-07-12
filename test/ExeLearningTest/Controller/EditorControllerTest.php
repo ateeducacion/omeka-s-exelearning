@@ -764,7 +764,7 @@ class EditorControllerTest extends TestCase
     {
         // The preview token must NOT share the default form-token namespace, so
         // the form token's 5-minute container-global expiry cannot wipe it.
-        $this->assertSame('exelearning-preview', \ExeLearning\Controller\PreviewCsrf::NAME);
+        $this->assertSame('exelearning_preview', \ExeLearning\Controller\PreviewCsrf::NAME);
     }
 
     public function testBuildInstallStatusPayloadHandlesIdleNotInstalledState(): void
