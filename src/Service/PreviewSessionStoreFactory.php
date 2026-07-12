@@ -7,24 +7,27 @@ use Interop\Container\ContainerInterface;
 use Laminas\ServiceManager\Factory\FactoryInterface;
 
 /**
- * Builds the file-backed preview session store under the Omeka file store.
+ * Builds the file-backed preview session store in a private temporary tree.
  *
- * Sessions live in a dedicated `exelearning-preview/` tree next to the
- * published-content `exelearning/` tree used by ContentController; both derive
- * from the local file store base path (or OMEKA_PATH/files as a fallback). The
- * tree is ephemeral — the store sweeps idle sessions on access.
+ * Materialized preview documents contain untrusted author HTML/SVG/XML and must
+ * never be reachable directly through Omeka's public `files/` tree, where they
+ * would bypass PreviewController and its sandbox CSP. A site-scoped system-temp
+ * directory is therefore the secure default. Deployments may provide another
+ * PRIVATE path through `exelearning.preview_store_path`.
  */
 class PreviewSessionStoreFactory implements FactoryInterface
 {
     public function __invoke(ContainerInterface $container, $requestedName, array $options = null)
     {
         $config = $container->get('Config');
-        $localBase = $config['file_store']['local']['base_path']
-            ?? (OMEKA_PATH . '/files');
-        $basePath = $localBase . '/exelearning-preview';
+        $configuredPath = $config['exelearning']['preview_store_path'] ?? null;
+        $siteKey = substr(hash('sha256', (string) OMEKA_PATH), 0, 16);
+        $basePath = is_string($configuredPath) && $configuredPath !== ''
+            ? $configuredPath
+            : sys_get_temp_dir() . '/omeka-s-exelearning-preview-' . $siteKey;
 
         return new PreviewSessionStore(
-            $basePath,
+            rtrim($basePath, '/\\'),
             $container->get(PreviewFixedResources::class)
         );
     }
