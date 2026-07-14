@@ -60,6 +60,8 @@ $configScript = <<<SCRIPT
                 var m = cfg.saveEndpoint.match(/\/api\/exelearning\/.+/);
                 if (m) cfg.saveEndpoint = base + m[0];
             }
+            cfg.previewManagementUrl = base + cfg.previewManagementPath;
+            cfg.previewServingUrl = base + cfg.previewServingPath;
         })();
 
         // Override static mode detection for Omeka S
@@ -126,6 +128,13 @@ $configScript = <<<SCRIPT
             basePath: {$editorBaseUrlJs},
             parentOrigin: window.location.origin,
             trustedOrigins: [window.location.origin],
+            previewSnapshot: {
+                managementUrl: window.__OMEKA_EXE_CONFIG__.previewManagementUrl,
+                servingBaseUrl: window.__OMEKA_EXE_CONFIG__.previewServingUrl,
+                managementHeaders: {
+                    'X-CSRF-Token': window.__OMEKA_EXE_CONFIG__.csrfToken,
+                },
+            },
             hideUI: {
                 fileMenu: true,
                 saveButton: true,

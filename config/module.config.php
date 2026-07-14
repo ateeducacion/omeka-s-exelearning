@@ -22,6 +22,7 @@ return [
             Controller\ApiController::class => Controller\ApiControllerFactory::class,
             Controller\EditorController::class => Controller\EditorControllerFactory::class,
             Controller\ContentController::class => Controller\ContentControllerFactory::class,
+            Controller\PreviewController::class => Controller\PreviewControllerFactory::class,
             Controller\StylesServeController::class => Controller\StylesServeControllerFactory::class,
             Controller\Admin\StylesController::class => Controller\Admin\StylesControllerFactory::class,
         ],
@@ -29,6 +30,7 @@ return [
             'ExeLearning\Controller\Editor' => Controller\EditorController::class,
             'ExeLearning\Controller\Api' => Controller\ApiController::class,
             'ExeLearning\Controller\Content' => Controller\ContentController::class,
+            'ExeLearning\Controller\Preview' => Controller\PreviewController::class,
             'ExeLearning\Controller\StylesServe' => Controller\StylesServeController::class,
             'ExeLearning\Controller\Admin\Styles' => Controller\Admin\StylesController::class,
         ],
@@ -38,6 +40,7 @@ return [
         'factories' => [
             Service\ElpFileService::class => Service\ElpFileServiceFactory::class,
             Service\StylesService::class => Service\StylesServiceFactory::class,
+            Service\PreviewSnapshotStore::class => Service\PreviewSnapshotStoreFactory::class,
         ],
     ],
 
@@ -75,6 +78,19 @@ return [
                     'defaults' => [
                         '__NAMESPACE__' => 'ExeLearning\Controller',
                         'controller' => 'Content',
+                        'action' => 'serve',
+                        'file' => 'index.html',
+                    ],
+                ],
+            ],
+            'exelearning-preview' => [
+                'type' => Regex::class,
+                'options' => [
+                    'regex' => '/exelearning/preview/(?<previewId>[0-9a-f-]{36})(?:/(?<file>.*))?',
+                    'spec' => '/exelearning/preview/%previewId%/%file%',
+                    'defaults' => [
+                        '__NAMESPACE__' => 'ExeLearning\Controller',
+                        'controller' => 'Preview',
                         'action' => 'serve',
                         'file' => 'index.html',
                     ],
@@ -138,6 +154,20 @@ return [
                             ],
                             'defaults' => [
                                 'action' => 'getData',
+                            ],
+                        ],
+                    ],
+                    'preview-session' => [
+                        'type' => Segment::class,
+                        'options' => [
+                            'route' => '/preview-session/:id[/:previewId]',
+                            'constraints' => [
+                                'id' => '\d+',
+                                'previewId' => '[0-9a-f-]{36}',
+                            ],
+                            'defaults' => [
+                                'controller' => 'Preview',
+                                'action' => 'manage',
                             ],
                         ],
                     ],

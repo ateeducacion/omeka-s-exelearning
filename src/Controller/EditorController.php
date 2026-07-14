@@ -103,6 +103,8 @@ class EditorController extends AbstractActionController
             'saveEndpoint' => $serverUrl . $basePath . '/api/exelearning/save/' . $mediaId,
             'editorBaseUrl' => $serverUrl . $basePath . '/modules/ExeLearning/dist/static',
             'csrfToken' => $csrfToken,
+            'previewManagementPath' => '/api/exelearning/preview-session/' . $mediaId,
+            'previewServingPath' => '/exelearning/preview/',
             'locale' => substr($this->settings()->get('locale', 'en_US'), 0, 2),
             'userName' => $user->getName(),
             'userId' => $user->getId(),
