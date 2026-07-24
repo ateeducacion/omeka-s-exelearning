@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   PHPMD:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Run PHPMD scanning
     runs-on: ubuntu-latest
     permissions:
