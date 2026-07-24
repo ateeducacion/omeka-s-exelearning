@@ -65,7 +65,7 @@ re-litigate. In this module that typically includes decisions affecting:
 - Omeka S integration boundaries: media rendering, lifecycle event hooks
   (`api.hydrate.post`, `api.create.post`, `api.delete.pre`, `view.show.after`),
   and module configuration;
-- the embedded editor installation/download/build flow and where its assets
+- the embedded editor bundling/build flow and where its assets
   live;
 - backward-compatibility guarantees for stored media, routes, or the module
   configuration;
