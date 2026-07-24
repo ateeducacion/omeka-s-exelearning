@@ -156,7 +156,7 @@ final class DownloadFormats
      */
     public static function renderSplitButton($view, $media, array $formatIds, string $variant = 'default'): string
     {
-        $editorInstalled = \ExeLearning\Service\StaticEditorInstaller::isEditorInstalled();
+        $editorInstalled = \ExeLearning\Service\EditorBundle::isAvailable();
 
         $items = [];
         foreach ($formatIds as $id) {
@@ -164,9 +164,9 @@ final class DownloadFormats
             if (!$fmt) {
                 continue;
             }
-            // When the static editor is not installed only the raw `.elpx`
-            // download works (it's just the original attachment). Mark the
-            // others as disabled so the UI is honest about what is reachable.
+            // Without the bundled editor only the raw `.elpx` download
+            // works (it's just the original attachment). Mark the others as
+            // disabled so the UI is honest about what is reachable.
             $fmt['disabled'] = $fmt['client'] && !$editorInstalled;
             $items[] = $fmt;
         }
@@ -278,7 +278,7 @@ final class DownloadFormats
         }
 
         $title = $disabled
-            ? $view->escapeHtmlAttr($view->translate('Install the eXeLearning editor from Module → Settings to enable this format.'))
+            ? $view->escapeHtmlAttr($view->translate('This format requires the embedded editor, which is not included in this installation.'))
             : '';
 
         if ($fmt['id'] === 'elpx') {

@@ -9,11 +9,7 @@ status, update the table and the per-status lists below.
 
 | ID | Title | Status | Date | Related SDD |
 |----|-------|--------|------|-------------|
-| _None yet_ | | | | |
-
-> No ADRs have been recorded yet. The first numbered ADR (`ADR-0001`) will be
-> created by the first change that locks in a durable architecture decision.
-> Copy [`template.md`](template.md) to `ADR-0001-short-title.md` to start it.
+| [ADR-0001](ADR-0001-bundle-editor-exclusively-in-release-packages.md) | Bundle the embedded editor exclusively in release packages | Accepted | 2026-07-24 | — |
 
 ## Proposed ADRs
 
@@ -21,7 +17,8 @@ _No proposed ADRs yet._
 
 ## Accepted ADRs
 
-_No accepted ADRs yet._
+- [ADR-0001](ADR-0001-bundle-editor-exclusively-in-release-packages.md) —
+  Bundle the embedded editor exclusively in release packages.
 
 ## Superseded ADRs
 

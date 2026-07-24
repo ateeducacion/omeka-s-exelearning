@@ -719,41 +719,4 @@ class EditorControllerTest extends TestCase
         };
         $this->assertSame('', $this->callProtectedMethod($this->controller, 'resolveBasePath', [$request]));
     }
-
-    public function testBuildInstallStatusPayloadHandlesIdleNotInstalledState(): void
-    {
-        $settings = new class {
-            private array $store = [];
-            public function set(string $key, $value): void { $this->store[$key] = $value; }
-            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
-        };
-
-        $payload = $this->callProtectedMethod($this->controller, 'buildInstallStatusPayload', [$settings]);
-
-        $this->assertSame('idle', $payload['phase']);
-        $this->assertFalse($payload['is_installed']);
-        $this->assertSame('Download & Install Editor', $payload['button_label']);
-        $this->assertStringContainsString('not installed', strtolower($payload['description']));
-    }
-
-    public function testBuildInstallStatusPayloadConvertsStaleStatusToError(): void
-    {
-        $settings = new class {
-            private array $store = [];
-            public function set(string $key, $value): void { $this->store[$key] = $value; }
-            public function get(string $key, $default = null) { return $this->store[$key] ?? $default; }
-        };
-
-        $settings->set(\ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_PHASE, 'installing');
-        $settings->set(
-            \ExeLearning\Service\StaticEditorInstaller::SETTING_INSTALL_STARTED_AT,
-            time() - (\ExeLearning\Service\StaticEditorInstaller::INSTALL_LOCK_TTL + 5)
-        );
-
-        $payload = $this->callProtectedMethod($this->controller, 'buildInstallStatusPayload', [$settings]);
-
-        $this->assertSame('error', $payload['phase']);
-        $this->assertFalse($payload['running']);
-        $this->assertStringContainsString('stalled', strtolower($payload['error']));
-    }
 }

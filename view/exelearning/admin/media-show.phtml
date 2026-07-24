@@ -9,9 +9,9 @@
 
 use ExeLearning\Service\DownloadFormats;
 
-// Check if user can edit this media and if the editor is installed
+// Check if user can edit this media and if the bundled editor is available
 $canEdit = $this->identity() && $this->userIsAllowed('Omeka\Entity\Media', 'update');
-$editorInstalled = \ExeLearning\Service\StaticEditorInstaller::isEditorInstalled();
+$editorInstalled = \ExeLearning\Service\EditorBundle::isAvailable();
 
 $exeStoredFormats = null;
 try {

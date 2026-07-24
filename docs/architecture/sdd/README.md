@@ -39,7 +39,7 @@ Write an SDD for work that needs a design gate before implementation:
 - significant new features;
 - major refactors or rewrites of a subsystem;
 - cross-cutting changes (ELPX upload/extraction, the content proxy, the embedded
-  editor install flow, media integration);
+  editor bundling, media integration);
 - security-sensitive changes (upload validation, path-traversal protection,
   CSP headers, iframe sandboxing, CSRF protection, ACL/permission checks);
 - data or storage changes (the `/files/exelearning/{sha1}/` layout, cleanup,

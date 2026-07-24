@@ -74,7 +74,7 @@ where the records live under `doc/architecture/`.
 module. This repository stores its documentation under `docs/`, so the records
 live under `docs/architecture/`. The templates and guidance are tailored to
 module concerns — ELPX upload/extraction, Omeka S media and lifecycle hooks, the
-content proxy and CSP/iframe security model, the embedded editor install flow,
+content proxy and CSP/iframe security model, the embedded editor bundling,
 and Omeka S / PHP compatibility — rather than the main repository's server,
 collaboration and export internals. The two repositories keep separate,
 independent record histories.

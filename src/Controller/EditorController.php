@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace ExeLearning\Controller;
 
 use ExeLearning\Service\ElpFileService;
-use ExeLearning\Service\StaticEditorInstaller;
+use ExeLearning\Service\EditorBundle;
 use ExeLearning\Service\StylesService;
 use Laminas\Mvc\Controller\AbstractActionController;
 use Laminas\View\Model\ViewModel;
@@ -73,10 +73,11 @@ class EditorController extends AbstractActionController
             return $this->redirect()->toRoute('admin');
         }
 
-        $editorPath = dirname(__DIR__, 2) . '/dist/static/index.html';
-        if (!file_exists($editorPath)) {
+        if (!EditorBundle::isAvailable()) {
+            // The editor ships inside the module package and is never
+            // downloaded at runtime (ADR-0001).
             $this->messenger()->addWarning(
-                $this->translate('The embedded eXeLearning editor is not installed. Please install it from the module configuration page.') // @translate
+                $this->translate('This installation does not include the embedded editor, so editing eXeLearning content is disabled. Official release packages include it; development checkouts must build it with "make build-editor".') // @translate
             );
             return $this->redirect()->toRoute('admin/default', [
                 'controller' => 'module',
@@ -233,11 +234,10 @@ class EditorController extends AbstractActionController
             return $response;
         }
 
-        $editorPath = dirname(__DIR__, 2) . '/dist/static/index.html';
-        if (!file_exists($editorPath)) {
+        if (!EditorBundle::isAvailable()) {
             $response = $this->getResponse();
             $response->setStatusCode(503);
-            $response->setContent('Static eXeLearning editor not installed.');
+            $response->setContent('The bundled eXeLearning editor is not available.');
             return $response;
         }
 
@@ -290,173 +290,5 @@ class EditorController extends AbstractActionController
     public function indexAction()
     {
         return $this->redirect()->toRoute('admin');
-    }
-
-    /**
-     * Install or update the static eXeLearning editor.
-     *
-     * @return \Laminas\Http\Response
-     *
-     * @codeCoverageIgnore
-     */
-    public function installEditorAction()
-    {
-        $request = $this->getRequest();
-
-        if (!$request->isPost()) {
-            return $this->jsonError(405, 'Method not allowed');
-        }
-
-        if (!$this->identity()) {
-            return $this->jsonError(401, 'Unauthorized');
-        }
-
-        // CSRF is mandatory: a request that omits the token is rejected.
-        if (!$this->validateCsrf($request)) {
-            return $this->jsonError(403, 'CSRF: Invalid or missing CSRF token');
-        }
-
-        $services = $this->getEvent()->getApplication()->getServiceManager();
-
-        // Installing the editor is an admin-only operation (downloads from the
-        // network and writes to dist/static). Enforce the same module-update
-        // ACL the API controller does, so authorization cannot drift.
-        $acl = $services->get('Omeka\Acl');
-        if (!$acl->userIsAllowed('Omeka\Entity\Module', 'update')) {
-            return $this->jsonError(403, 'Forbidden');
-        }
-
-        $settings = $services->get('Omeka\Settings');
-        $status = StaticEditorInstaller::getStoredInstallStatus($settings);
-        if ($status['running']) {
-            return $this->jsonError(409, 'An editor installation is already in progress.');
-        }
-
-        $startedAt = time();
-        StaticEditorInstaller::storeInstallStatus($settings, 'checking', 'Checking latest version...', [
-            'started_at' => $startedAt,
-            'target_version' => '',
-            'success' => false,
-            'error' => '',
-        ]);
-
-        $installer = (new StaticEditorInstaller())->setStatusCallback(
-            function (string $phase, string $message, array $extra = []) use ($settings, $startedAt): void {
-                $extra['started_at'] = $startedAt;
-                StaticEditorInstaller::storeInstallStatus($settings, $phase, $message, $extra);
-            }
-        );
-
-        try {
-            $result = $installer->installLatestEditor();
-
-            $settings->set(StaticEditorInstaller::SETTING_VERSION, $result['version']);
-            $settings->set(StaticEditorInstaller::SETTING_INSTALLED_AT, $result['installed_at']);
-
-            StaticEditorInstaller::storeInstallStatus($settings, 'done', sprintf(
-                'eXeLearning editor v%s installed successfully.',
-                $result['version']
-            ), [
-                'started_at' => $startedAt,
-                'target_version' => $result['version'],
-                'success' => true,
-                'error' => '',
-            ]);
-
-            return $this->jsonResponse([
-                'success' => true,
-                'message' => sprintf('eXeLearning editor v%s installed successfully.', $result['version']),
-                'version' => $result['version'],
-                'installed_at' => $result['installed_at'],
-                'status' => $this->buildInstallStatusPayload($settings),
-            ]);
-        } catch (\Throwable $e) {
-            StaticEditorInstaller::storeInstallStatus($settings, 'error', $e->getMessage(), [
-                'started_at' => $startedAt,
-                'target_version' => $status['target_version'] ?? '',
-                'success' => false,
-                'error' => $e->getMessage(),
-            ]);
-            return $this->jsonError(500, $e->getMessage(), $this->buildInstallStatusPayload($settings));
-        }
-    }
-
-    /**
-     * Return the current editor installation status.
-     *
-     * @return \Laminas\Http\Response
-     *
-     * @codeCoverageIgnore
-     */
-    public function installEditorStatusAction()
-    {
-        if (!$this->identity()) {
-            return $this->jsonError(401, 'Unauthorized');
-        }
-
-        $settings = $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings');
-        return $this->jsonResponse([
-            'success' => true,
-            'status' => $this->buildInstallStatusPayload($settings),
-        ]);
-    }
-
-    /**
-     * Build the install status payload used by the admin UI.
-     */
-    private function buildInstallStatusPayload($settings): array
-    {
-        $stored = StaticEditorInstaller::getStoredInstallStatus($settings);
-        $isInstalled = StaticEditorInstaller::isEditorInstalled();
-        $version = (string) $settings->get(StaticEditorInstaller::SETTING_VERSION, '');
-        $installedAt = (string) $settings->get(StaticEditorInstaller::SETTING_INSTALLED_AT, '');
-
-        if ($stored['stale']) {
-            $stored['phase'] = 'error';
-            $stored['message'] = 'The previous installation appears to have stalled. Please try again.';
-            $stored['error'] = $stored['message'];
-            $stored['running'] = false;
-        }
-
-        return [
-            'phase' => $stored['phase'],
-            'message' => $stored['message'],
-            'target_version' => $stored['target_version'],
-            'running' => $stored['running'],
-            'finished' => !$stored['running'] && in_array($stored['phase'], ['done', 'error', 'idle'], true),
-            'success' => $stored['success'],
-            'error' => $stored['error'],
-            'is_installed' => $isInstalled,
-            'installed_version' => $version,
-            'installed_at' => $installedAt,
-            'button_label' => $isInstalled ? 'Update to Latest Version' : 'Download & Install Editor',
-            'button_class' => $isInstalled ? 'button' : 'button active',
-            'description' => $isInstalled
-                ? ''
-                : 'The embedded eXeLearning editor is not installed. You can download and install the latest version automatically from GitHub.',
-        ];
-    }
-
-    /**
-     * Return a JSON response directly, bypassing the admin view layer.
-     * Admin routes use ViewModel rendering which breaks JsonModel.
-     *
-     * @codeCoverageIgnore
-     */
-    private function jsonResponse(array $data, int $statusCode = 200): \Laminas\Http\Response
-    {
-        $response = $this->getResponse();
-        $response->setStatusCode($statusCode);
-        $response->getHeaders()->addHeaderLine('Content-Type', 'application/json');
-        $response->setContent(json_encode($data));
-        return $response;
-    }
-
-    /**
-     * @codeCoverageIgnore
-     */
-    private function jsonError(int $statusCode, string $message, array $extra = []): \Laminas\Http\Response
-    {
-        return $this->jsonResponse(array_merge(['success' => false, 'message' => $message], $extra), $statusCode);
     }
 }
