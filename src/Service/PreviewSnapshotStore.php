@@ -70,16 +70,13 @@ class PreviewSnapshotStore
     {
         $this->sweepExpired();
 
-        $id = ($previewId !== null && $previewId !== '') ? $previewId : $this->generateId();
-        if (!preg_match(self::UUID_RE, $id)) {
-            return ['error' => 'Invalid preview capability.', 'status' => 400];
-        }
-        $meta = $this->readMeta($id);
-        if ($previewId !== null && $previewId !== '' && $meta === null) {
-            return ['error' => 'Preview snapshot not found.', 'status' => 404];
-        }
-        if ($meta !== null && (int) ($meta['ownerId'] ?? -1) !== $ownerId) {
-            return ['error' => 'Preview snapshot belongs to another user.', 'status' => 403];
+        $replacing = $previewId !== null && $previewId !== '';
+        $id = $replacing ? $previewId : $this->generateId();
+        if ($replacing) {
+            $guard = $this->authorize($id, $ownerId);
+            if ($guard !== null) {
+                return $guard;
+            }
         }
 
         $staging = $this->basePath . '/.staging-' . bin2hex(random_bytes(12));
@@ -190,35 +187,48 @@ class PreviewSnapshotStore
     }
 
     /**
-     * The owner of a snapshot, or null when it does not exist.
+     * The authorization verdict for a capability this user is claiming.
      *
-     * Callers need the two cases apart: a capability nobody holds is a 404,
-     * while one held by another author is a 403 — the same distinction
-     * {@see replace()} already draws. `delete()` alone cannot express it,
-     * because a single false collapses both.
+     * Both management verbs run through here, so publish and delete can never
+     * disagree about what owner scoping means: a malformed id is a 400, one
+     * nobody holds a 404 and somebody else's a 403. Keeping the rule in the
+     * store — rather than letting each caller reassemble it — is what makes that
+     * guarantee structural instead of a convention two actions must remember.
      *
      * @param string $previewId
-     * @return int|null
+     * @param int $ownerId
+     * @return array{error:string,status:int}|null Null when the caller may proceed.
      */
-    public function ownerOf(string $previewId): ?int
+    public function authorize(string $previewId, int $ownerId): ?array
     {
         if (!preg_match(self::UUID_RE, $previewId)) {
-            return null;
+            return ['error' => 'Invalid preview capability.', 'status' => 400];
         }
         $meta = $this->readMeta($previewId);
-        return $meta === null ? null : (int) ($meta['ownerId'] ?? -1);
+        if ($meta === null) {
+            return ['error' => 'Preview snapshot not found.', 'status' => 404];
+        }
+        if ((int) ($meta['ownerId'] ?? -1) !== $ownerId) {
+            return ['error' => 'Preview snapshot belongs to another user.', 'status' => 403];
+        }
+        return null;
     }
 
     /**
-     * Delete a snapshot owned by this user.
+     * Delete a snapshot after {@see authorize()} has cleared the caller.
+     *
+     * @param string $previewId
+     * @param int $ownerId
+     * @return array{error:string,status:int}|null Null once it is gone.
      */
-    public function delete(string $previewId, int $ownerId): bool
+    public function deleteOwned(string $previewId, int $ownerId): ?array
     {
-        if ($this->ownerOf($previewId) !== $ownerId) {
-            return false;
+        $guard = $this->authorize($previewId, $ownerId);
+        if ($guard !== null) {
+            return $guard;
         }
         $this->removeTree($this->basePath . '/' . $previewId);
-        return true;
+        return null;
     }
 
     /**

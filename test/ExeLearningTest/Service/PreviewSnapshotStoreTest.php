@@ -126,18 +126,15 @@ class PreviewSnapshotStoreTest extends TestCase
     }
 
     /**
-     * The two rejection cases have to stay distinguishable: callers map an
-     * unknown capability to 404 and somebody else's to 403, and delete() alone
-     * collapses both into a single false.
+     * Both verbs share one verdict, so delete reports the same statuses publish
+     * does for the same conditions.
      */
-    public function testOwnerOfSeparatesUnknownFromForeign(): void
+    public function testDeleteReportsTheSameVerdictAsPublish(): void
     {
         $store = $this->store();
-        $id = $store->replace(self::OWNER, $this->zip(['index.html' => 'ok']))['previewId'];
 
-        $this->assertSame(self::OWNER, $store->ownerOf($id));
-        $this->assertNull($store->ownerOf('11111111-2222-4333-8444-555555555555'));
-        $this->assertNull($store->ownerOf('not-a-uuid'));
+        $this->assertSame(404, $store->deleteOwned('11111111-2222-4333-8444-555555555555', self::OWNER)['status']);
+        $this->assertSame(400, $store->deleteOwned('not-a-uuid', self::OWNER)['status']);
     }
 
     public function testDeleteIsOwnerScoped(): void
@@ -145,10 +142,10 @@ class PreviewSnapshotStoreTest extends TestCase
         $store = $this->store();
         $id = $store->replace(self::OWNER, $this->zip(['index.html' => 'ok']))['previewId'];
 
-        $this->assertFalse($store->delete($id, self::OWNER + 1));
+        $this->assertSame(403, $store->deleteOwned($id, self::OWNER + 1)['status']);
         $this->assertNotNull($store->contentDir($id));
 
-        $this->assertTrue($store->delete($id, self::OWNER));
+        $this->assertNull($store->deleteOwned($id, self::OWNER));
         $this->assertNull($store->contentDir($id));
     }
 

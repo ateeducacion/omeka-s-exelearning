@@ -10,7 +10,7 @@ use Laminas\Mvc\Controller\AbstractActionController;
 /**
  * Host-served opaque HTTP preview — capability serving route (Omeka S adapter).
  *
- * Implements the eXeLearning canonical preview serving contract v2
+ * Implements the eXeLearning canonical preview serving contract
  * (doc/development/preview-serving-contract.md in eXe core, mirrored in this
  * repo under docs/preview-serving-contract.md). It serves the editor preview of
  * UNTRUSTED author HTML/JS in an opaque origin over a real, cookieless
@@ -136,10 +136,9 @@ class PreviewController extends AbstractActionController
             return $this->preview404();
         }
 
-        // 3) Three-layer resolution against the active revision only. The store
-        //    never lets a client path do filesystem arithmetic; documents/assets
-        //    are exact-key reads and the fixed layer resolves through the
-        //    server-controlled manifest.
+        // 3) Resolve inside the snapshot. A client path never does filesystem
+        //    arithmetic: it is normalized and then confirmed with realpath() to
+        //    sit under the snapshot's content directory.
         $file = $this->lookupPreviewFile($previewId, $path);
         if ($file === null) {
             return $this->preview404();
@@ -153,15 +152,12 @@ class PreviewController extends AbstractActionController
             return $this->serveAsset($bytes, $mime, (string) ($file['etag'] ?? ''));
         }
 
-        // Documents (no-store) and fixed resources (immutable, long-lived).
+        // A scriptable document: rewritten on every refresh, so never cached.
         $response = new HttpResponse();
         $response->setStatusCode(200);
         $headers = $response->getHeaders();
         $this->applyBaseHeaders($headers, $mime);
-        $headers->addHeaderLine(
-            'Cache-Control',
-            $kind === 'fixed' ? 'private, max-age=31536000' : 'no-store'
-        );
+        $headers->addHeaderLine('Cache-Control', 'no-store');
         $this->addSandboxCspIfScriptable($headers, $mime);
         $headers->addHeaderLine('Content-Length', (string) strlen($bytes));
         $response->setContent($bytes);
@@ -169,13 +165,13 @@ class PreviewController extends AbstractActionController
     }
 
     /**
-     * Serve a session project asset (layer 2): revalidating cache tier with an
-     * `ETag: "<assetKey>"`, `If-None-Match` -> 304, and single-range 206/416 so
-     * large audio/video seek without a full re-download.
+     * Serve a non-scriptable asset: revalidating cache tier with an `ETag`,
+     * `If-None-Match` -> 304, and single-range 206/416 so large audio/video seek
+     * without a full re-download.
      *
      * @param string $bytes
      * @param string $mime
-     * @param string $etag  The assetKey (opaque immutable content identity).
+     * @param string $etag  Entity tag for this file in this snapshot.
      * @return HttpResponse
      */
     private function serveAsset(string $bytes, string $mime, string $etag): HttpResponse
@@ -220,8 +216,8 @@ class PreviewController extends AbstractActionController
     }
 
     /**
-     * Three-layer store lookup for the serving route. Returns a descriptor
-     * `['kind' => 'document'|'asset'|'fixed', 'bytes' => string, 'etag'? =>
+     * Store lookup for the serving route. Returns a descriptor
+     * `['kind' => 'document'|'asset', 'bytes' => string, 'etag'? =>
      * string]`, or null on a miss (unknown/expired session, no active revision,
      * or a path resolving to nothing).
      *

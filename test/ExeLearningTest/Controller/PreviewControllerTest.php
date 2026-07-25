@@ -269,38 +269,6 @@ class PreviewControllerTest extends TestCase
         $this->assertNotNull($response->getHeaders()->get('Content-Security-Policy'));
     }
 
-    // =========================================================================
-    // serveAction(): fixed resources (layer 1) — immutable long-lived cache
-    // =========================================================================
-
-    public function testServeActionServesFixedResourceWithImmutableCacheNoCsp(): void
-    {
-        $controller = $this->servingController(['kind' => 'fixed', 'bytes' => 'window.jQuery=function(){};']);
-        $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'libs/jquery/jquery.min.js']);
-
-        $response = $controller->serveAction();
-
-        $this->assertSame(200, $response->getStatusCode());
-        $this->assertSame('window.jQuery=function(){};', $response->getContent());
-        $this->assertSame('private, max-age=31536000', $response->getHeaders()->get('Cache-Control')->getFieldValue());
-        $this->assertNull($response->getHeaders()->get('Content-Security-Policy'));
-    }
-
-    public function testServeActionServesFixedScriptableSvgWithSandboxCsp(): void
-    {
-        // The sandbox CSP must be emitted on scriptable types from EVERY layer,
-        // fixed included ("SVG opened in a new tab").
-        $bytes = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
-        $controller = $this->servingController(['kind' => 'fixed', 'bytes' => $bytes]);
-        $controller->setRouteParams(['previewId' => self::VALID_UUID, 'file' => 'theme/icon.svg']);
-
-        $response = $controller->serveAction();
-
-        $headers = $response->getHeaders();
-        $this->assertSame('image/svg+xml; charset=utf-8', $headers->get('Content-Type')->getFieldValue());
-        $this->assertSame('private, max-age=31536000', $headers->get('Cache-Control')->getFieldValue());
-        $this->assertSame(self::EXPECTED_CSP, $headers->get('Content-Security-Policy')->getFieldValue());
-    }
 
     // =========================================================================
     // serveAction(): session assets (layer 2) — revalidating tier

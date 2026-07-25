@@ -82,12 +82,9 @@ class PreviewSessionController extends AbstractActionController
     /**
      * DELETE /api/exelearning/preview-session/:id — drop a snapshot.
      *
-     * Owner scoping reports the same two statuses as {@see createAction()}: 404
-     * for a capability that does not exist, 403 for one that belongs to somebody
-     * else. The store's delete() collapses both into a single false, so the
-     * distinction is drawn here — otherwise deleting another author's capability
-     * would answer 404 while publishing over it answers 403, for the very same
-     * condition.
+     * Owner scoping comes from the same store verdict the publish path uses, so
+     * the two verbs cannot drift: a malformed id is a 400, an unknown capability
+     * a 404 and somebody else's a 403.
      *
      * @return JsonModel
      */
@@ -100,15 +97,10 @@ class PreviewSessionController extends AbstractActionController
             return $this->error(403, 'CSRF: Invalid or missing CSRF token');
         }
 
-        $previewId = $this->previewId();
-        $owner = $this->store->ownerOf($previewId);
-        if ($owner === null) {
-            return $this->error(404, 'Preview snapshot not found');
+        $refused = $this->store->deleteOwned($this->previewId(), $this->ownerId());
+        if ($refused !== null) {
+            return $this->error((int) $refused['status'], (string) $refused['error']);
         }
-        if ($owner !== $this->ownerId()) {
-            return $this->error(403, 'Preview snapshot belongs to another user');
-        }
-        $this->store->delete($previewId, $this->ownerId());
         return new JsonModel(['success' => true]);
     }
 
