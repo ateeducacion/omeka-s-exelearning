@@ -606,6 +606,47 @@ class PreviewControllerTest extends TestCase
     }
 
     /**
+     * The ETag is built from identity rather than from hashing the bytes, so it
+     * has to turn over on a refresh that mtime and size alone cannot see: two
+     * publishes inside the same second where the file keeps its length.
+     */
+    public function testEtagTurnsOverOnASameSizeRefresh(): void
+    {
+        $base = sys_get_temp_dir() . '/exe-preview-etag-' . uniqid();
+        mkdir($base, 0700, true);
+        $store = new PreviewSnapshotStore($base);
+        $controller = new class ($store) extends PreviewController {
+            public function lookup(string $previewId, string $path): ?array
+            {
+                return $this->lookupPreviewFile($previewId, $path);
+            }
+        };
+
+        $previewId = $store->replace(1, $this->assetZip($base, 'a{color:#111}'))['previewId'];
+        $before = $controller->lookup($previewId, 'style/main.css')['etag'];
+
+        // Same length, different bytes, published immediately after.
+        $store->replace(1, $this->assetZip($base, 'a{color:#222}'), $previewId);
+        $after = $controller->lookup($previewId, 'style/main.css')['etag'];
+
+        $this->assertNotSame($before, $after);
+
+        $this->removeTree($base);
+    }
+
+    /** Build a snapshot ZIP whose stylesheet carries $css. */
+    private function assetZip(string $base, string $css): string
+    {
+        $path = $base . '/snapshot-' . uniqid() . '.zip';
+        $archive = new ZipArchive();
+        $archive->open($path, ZipArchive::CREATE);
+        $archive->addFromString('index.html', '<html></html>');
+        $archive->addFromString('style/main.css', $css);
+        $archive->close();
+        return $path;
+    }
+
+    /**
      * The asset tier must not read the file to describe it. A 304 sends no body
      * and a range sends a slice, so reading up front would pull a whole video
      * into memory to answer a conditional GET with nothing — repeatedly, since

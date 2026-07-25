@@ -300,7 +300,16 @@ class PreviewController extends AbstractActionController
             'kind' => 'asset',
             'path' => $real,
             'size' => $size,
-            'etag' => sha1($path . '|' . (string) @filemtime($real) . '|' . $size),
+            // The content directory's inode is part of the identity on purpose:
+            // mtime has one-second granularity, so an author refreshing twice
+            // within the same second with an edit that keeps a file the same
+            // length would otherwise produce the same tag and be handed a 304
+            // for the previous bytes. Every publish extracts into a fresh
+            // directory and renames it in, so the inode always turns over.
+            'etag' => sha1(
+                $path . '|' . (string) @fileinode($root)
+                    . '|' . (string) @filemtime($real) . '|' . $size
+            ),
         ];
     }
 
