@@ -84,7 +84,6 @@ class ExeLearningRenderer implements RendererInterface
         // Parent-side media host for the interactive-video iDevice in secure mode (DEC-0067):
         // completes the window.exeMediaBridge handshake and plays the provider video in a
         // modal via raw postMessage (no third-party SDK on this page). No-op in legacy.
-        IframeSandbox::enqueueMediaHost($view, $config['iframe_mode']);
 
         // Enqueue the download orchestrator only when the multi-format
         // button will actually be rendered.
