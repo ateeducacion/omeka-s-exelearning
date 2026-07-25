@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace ExeLearningTest\Controller;
 
 use ExeLearning\Controller\PreviewController;
+use ExeLearning\Service\PreviewSnapshotStore;
 use PHPUnit\Framework\TestCase;
+use ZipArchive;
 use ReflectionClass;
 
 /**
@@ -24,6 +26,9 @@ class PreviewControllerTest extends TestCase
 {
     /** A previewId that satisfies the capability-UUID gate. */
     private const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000';
+
+    /** @var list<string> Temp files backing stubbed asset descriptors. */
+    private array $tempAssets = [];
 
     private const PHOTO_KEY = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeffff0000@9c41d2e8a1b03f57';
 
@@ -592,8 +597,90 @@ class PreviewControllerTest extends TestCase
      * @param array{kind?: string, bytes: string, etag?: string}|null $file
      * @param object|null $request Optional request stub exposing getHeaders().
      */
+    protected function tearDown(): void
+    {
+        foreach ($this->tempAssets as $path) {
+            @unlink($path);
+        }
+        $this->tempAssets = [];
+    }
+
+    /**
+     * The asset tier must not read the file to describe it. A 304 sends no body
+     * and a range sends a slice, so reading up front would pull a whole video
+     * into memory to answer a conditional GET with nothing — repeatedly, since
+     * that is what scrubbing does.
+     */
+    public function testAssetDescriptorCarriesAPathRatherThanBytes(): void
+    {
+        $base = sys_get_temp_dir() . '/exe-preview-lookup-' . uniqid();
+        mkdir($base, 0700, true);
+        $store = new PreviewSnapshotStore($base);
+        $zip = $base . '/snapshot.zip';
+        $archive = new ZipArchive();
+        $archive->open($zip, ZipArchive::CREATE);
+        $archive->addFromString('index.html', '<html></html>');
+        $archive->addFromString('media/clip.mp4', str_repeat('v', 4096));
+        $archive->close();
+        $previewId = $store->replace(1, $zip)['previewId'];
+
+        $controller = new class ($store) extends PreviewController {
+            public function lookup(string $previewId, string $path): ?array
+            {
+                return $this->lookupPreviewFile($previewId, $path);
+            }
+        };
+
+        $asset = $controller->lookup($previewId, 'media/clip.mp4');
+        $this->assertSame('asset', $asset['kind']);
+        $this->assertArrayNotHasKey('bytes', $asset);
+        $this->assertSame(4096, $asset['size']);
+        $this->assertFileExists($asset['path']);
+
+        // A document is still read here: it is always sent whole.
+        $document = $controller->lookup($previewId, 'index.html');
+        $this->assertSame('document', $document['kind']);
+        $this->assertSame('<html></html>', $document['bytes']);
+
+        $this->removeTree($base);
+    }
+
+    private function removeTree(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            @unlink($dir);
+            return;
+        }
+        foreach ((array) scandir($dir) as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $this->removeTree($dir . '/' . $entry);
+        }
+        @rmdir($dir);
+    }
+
+    /**
+     * Build a controller whose store lookup is stubbed.
+     *
+     * Cases still declare `['kind' => 'asset', 'bytes' => '…']`, but the asset
+     * tier now works from a path so it can answer a 304 or a range without
+     * reading the file. The bytes are materialised into a temp file here, which
+     * keeps every case readable and still exercises the real read path.
+     */
     private function servingController(?array $file, ?object $request = null): PreviewController
     {
+        if ($file !== null && ($file['kind'] ?? '') === 'asset' && isset($file['bytes'])) {
+            $path = tempnam(sys_get_temp_dir(), 'exe-preview-asset-');
+            file_put_contents($path, $file['bytes']);
+            $this->tempAssets[] = $path;
+            $file = [
+                'kind' => 'asset',
+                'path' => $path,
+                'size' => strlen($file['bytes']),
+                'etag' => $file['etag'] ?? 'stub-etag',
+            ];
+        }
         $controller = new class($file) extends PreviewController {
             /** @var array|null */
             private $stubFile;

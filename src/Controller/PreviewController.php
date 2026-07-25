@@ -149,7 +149,12 @@ class PreviewController extends AbstractActionController
         $bytes = (string) ($file['bytes'] ?? '');
 
         if ($kind === 'asset') {
-            return $this->serveAsset($bytes, $mime, (string) ($file['etag'] ?? ''));
+            return $this->serveAsset(
+                (string) ($file['path'] ?? ''),
+                (int) ($file['size'] ?? 0),
+                $mime,
+                (string) ($file['etag'] ?? '')
+            );
         }
 
         // A scriptable document: rewritten on every refresh, so never cached.
@@ -169,12 +174,20 @@ class PreviewController extends AbstractActionController
      * `If-None-Match` -> 304, and single-range 206/416 so large audio/video seek
      * without a full re-download.
      *
-     * @param string $bytes
+     * Takes a path rather than bytes on purpose. A 304 sends no body and a range
+     * sends a slice, so reading the file up front would mean pulling a whole
+     * video into PHP memory to answer a conditional GET with nothing, or a seek
+     * with a few KB — which is exactly what video scrubbing does, repeatedly.
+     * The ETag is derived from identity (path, mtime, size) instead of hashing
+     * content, for the same reason.
+     *
+     * @param string $path  Absolute path to the file inside the snapshot.
+     * @param int    $total Size in bytes.
      * @param string $mime
      * @param string $etag  Entity tag for this file in this snapshot.
      * @return HttpResponse
      */
-    private function serveAsset(string $bytes, string $mime, string $etag): HttpResponse
+    private function serveAsset(string $path, int $total, string $mime, string $etag): HttpResponse
     {
         $response = new HttpResponse();
         $headers = $response->getHeaders();
@@ -190,7 +203,6 @@ class PreviewController extends AbstractActionController
             return $response;
         }
 
-        $total = strlen($bytes);
         $range = $this->parseRange($this->requestHeader('Range'), $total);
         if ($range === 'unsatisfiable') {
             $response->setStatusCode(416);
@@ -198,7 +210,8 @@ class PreviewController extends AbstractActionController
             return $response;
         }
         if (is_array($range)) {
-            $slice = substr($bytes, $range['start'], $range['end'] - $range['start'] + 1);
+            $length = $range['end'] - $range['start'] + 1;
+            $slice = $this->readSlice($path, $range['start'], $length);
             $response->setStatusCode(206);
             $headers->addHeaderLine(
                 'Content-Range',
@@ -211,22 +224,49 @@ class PreviewController extends AbstractActionController
 
         $response->setStatusCode(200);
         $headers->addHeaderLine('Content-Length', (string) $total);
-        $response->setContent($bytes);
+        $response->setContent((string) @file_get_contents($path));
         return $response;
     }
 
     /**
-     * Store lookup for the serving route. Returns a descriptor
-     * `['kind' => 'document'|'asset', 'bytes' => string, 'etag'? =>
-     * string]`, or null on a miss (unknown/expired session, no active revision,
-     * or a path resolving to nothing).
+     * Read $length bytes from $path starting at $start.
+     *
+     * @param string $path
+     * @param int $start
+     * @param int $length
+     * @return string
+     */
+    private function readSlice(string $path, int $start, int $length): string
+    {
+        $handle = @fopen($path, 'rb');
+        if ($handle === false) {
+            return '';
+        }
+        try {
+            if (@fseek($handle, $start) !== 0) {
+                return '';
+            }
+            $data = @fread($handle, $length);
+            return $data === false ? '' : $data;
+        } finally {
+            @fclose($handle);
+        }
+    }
+
+    /**
+     * Store lookup for the serving route.
+     *
+     * A scriptable document is read here — it is rewritten on every refresh and
+     * always sent whole. Everything else is described, not read: the serving
+     * tier may answer 304 with no body or 206 with a slice, so the bytes are
+     * pulled only once that decision is made.
      *
      * Declared `protected` so unit tests can exercise the serving success path
      * without a live store by overriding this single seam.
      *
      * @param string $previewId Validated capability UUID.
      * @param string $path      Normalized, traversal-safe key.
-     * @return array{kind: string, bytes: string, etag?: string}|null
+     * @return array{kind: string, bytes?: string, path?: string, size?: int, etag?: string}|null
      */
     protected function lookupPreviewFile(string $previewId, string $path): ?array
     {
@@ -248,18 +288,19 @@ class PreviewController extends AbstractActionController
         if (strpos($real, $root . DIRECTORY_SEPARATOR) !== 0) {
             return null;
         }
-        $bytes = @file_get_contents($real);
-        if ($bytes === false) {
-            return null;
-        }
         // A scriptable document is rewritten on every opaque refresh, so it is
         // never cached; everything else revalidates with an ETag and supports
         // Range, which is what makes a video inside the snapshot seekable.
-        $scriptable = $this->isScriptableDocument($this->contentTypeFor($path));
+        if ($this->isScriptableDocument($this->contentTypeFor($path))) {
+            $bytes = @file_get_contents($real);
+            return $bytes === false ? null : ['kind' => 'document', 'bytes' => $bytes];
+        }
+        $size = (int) @filesize($real);
         return [
-            'kind' => $scriptable ? 'document' : 'asset',
-            'bytes' => $bytes,
-            'etag' => md5($bytes),
+            'kind' => 'asset',
+            'path' => $real,
+            'size' => $size,
+            'etag' => sha1($path . '|' . (string) @filemtime($real) . '|' . $size),
         ];
     }
 
