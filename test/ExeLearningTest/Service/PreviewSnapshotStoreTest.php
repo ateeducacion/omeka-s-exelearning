@@ -125,6 +125,21 @@ class PreviewSnapshotStoreTest extends TestCase
         $this->assertSame(404, $result['status']);
     }
 
+    /**
+     * The two rejection cases have to stay distinguishable: callers map an
+     * unknown capability to 404 and somebody else's to 403, and delete() alone
+     * collapses both into a single false.
+     */
+    public function testOwnerOfSeparatesUnknownFromForeign(): void
+    {
+        $store = $this->store();
+        $id = $store->replace(self::OWNER, $this->zip(['index.html' => 'ok']))['previewId'];
+
+        $this->assertSame(self::OWNER, $store->ownerOf($id));
+        $this->assertNull($store->ownerOf('11111111-2222-4333-8444-555555555555'));
+        $this->assertNull($store->ownerOf('not-a-uuid'));
+    }
+
     public function testDeleteIsOwnerScoped(): void
     {
         $store = $this->store();

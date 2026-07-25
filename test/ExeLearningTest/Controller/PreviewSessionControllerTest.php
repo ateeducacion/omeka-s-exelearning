@@ -298,7 +298,11 @@ class PreviewSessionControllerTest extends TestCase
         $this->assertNull($this->store->contentDir($id));
     }
 
-    public function testDeleteOfAnotherUsersCapabilityIs404(): void
+    /**
+     * Owner scoping reports the same statuses on both management actions:
+     * another author's capability is a 403 here exactly as it is on publish.
+     */
+    public function testDeleteOfAnotherUsersCapabilityIs403(): void
     {
         $foreign = $this->store->replace(
             self::OWNER + 1,
@@ -311,8 +315,20 @@ class PreviewSessionControllerTest extends TestCase
 
         $controller->deleteAction();
 
-        $this->assertSame(404, $controller->getResponse()->getStatusCode());
+        $this->assertSame(403, $controller->getResponse()->getStatusCode());
         $this->assertNotNull($this->store->contentDir($foreign));
+    }
+
+    public function testDeleteOfAnUnknownCapabilityIs404(): void
+    {
+        $controller = $this->controller();
+        $controller->setRequest($this->request());
+        $controller->setIdentity($this->identity());
+        $controller->setRouteParams(['id' => '11111111-2222-4333-8444-555555555555']);
+
+        $controller->deleteAction();
+
+        $this->assertSame(404, $controller->getResponse()->getStatusCode());
     }
 
     public function testDeleteRejectsAnonymousWith401(): void

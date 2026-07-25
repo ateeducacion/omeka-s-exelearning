@@ -190,15 +190,31 @@ class PreviewSnapshotStore
     }
 
     /**
+     * The owner of a snapshot, or null when it does not exist.
+     *
+     * Callers need the two cases apart: a capability nobody holds is a 404,
+     * while one held by another author is a 403 — the same distinction
+     * {@see replace()} already draws. `delete()` alone cannot express it,
+     * because a single false collapses both.
+     *
+     * @param string $previewId
+     * @return int|null
+     */
+    public function ownerOf(string $previewId): ?int
+    {
+        if (!preg_match(self::UUID_RE, $previewId)) {
+            return null;
+        }
+        $meta = $this->readMeta($previewId);
+        return $meta === null ? null : (int) ($meta['ownerId'] ?? -1);
+    }
+
+    /**
      * Delete a snapshot owned by this user.
      */
     public function delete(string $previewId, int $ownerId): bool
     {
-        if (!preg_match(self::UUID_RE, $previewId)) {
-            return false;
-        }
-        $meta = $this->readMeta($previewId);
-        if ($meta === null || (int) ($meta['ownerId'] ?? -1) !== $ownerId) {
+        if ($this->ownerOf($previewId) !== $ownerId) {
             return false;
         }
         $this->removeTree($this->basePath . '/' . $previewId);
