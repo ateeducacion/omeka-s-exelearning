@@ -21,14 +21,14 @@ use Laminas\Mvc\Controller\AbstractActionController;
  * path normalization + 404), the same opaque-origin philosophy, and the same
  * sandbox token set as ExeLearning\Service\IframeSandbox. It differs in the
  * lookup: bytes resolve from an ephemeral PreviewSnapshotStore keyed by an
- * unguessable previewId (a server-minted UUID) + idle TTL — never from the real
- * filesystem for documents/assets, and only through the fixed-resource manifest
- * (server-controlled data) for the fixed layer.
+ * unguessable previewId (a server-minted UUID) + idle TTL, out of a snapshot
+ * directory that lives outside the web root.
  *
- * Three-layer resolution (active revision only): documents → assetRefs→assets →
- * fixedRefs→manifest → 404. Cache-Control is tiered by layer (documents
- * no-store; assets no-cache + ETag/Range/304; fixed private,max-age). The
- * sandbox-first CSP is emitted on EVERY scriptable document type from ANY layer.
+ * A requested path is normalized and then confirmed with realpath() to sit
+ * inside that snapshot's content directory. Cache-Control is tiered by kind: a
+ * scriptable document is no-store (it is rewritten on every refresh), every
+ * other file is no-cache + ETag/Range/304. The sandbox-first CSP is emitted on
+ * EVERY scriptable document type.
  *
  * IMPORTANT: self::PREVIEW_SANDBOX_CSP MUST stay BYTE-IDENTICAL to eXe core's
  * previewCspHeader() (src/shared/security/previewSandbox.ts). Do not reformat,
