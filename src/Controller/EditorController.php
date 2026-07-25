@@ -144,7 +144,7 @@ class EditorController extends AbstractActionController
             // Normalized HTTP preview transport config (serving contract v2 §1).
             // The dedicated long-lived preview CSRF token rides managementHeaders
             // so publishing survives a whole editing session (see PreviewCsrf).
-            'previewHttp' => $this->buildPreviewHttpConfig($serverUrl . $basePath, PreviewCsrf::mint()),
+            'previewSnapshot' => $this->buildPreviewSnapshotConfig($serverUrl . $basePath, PreviewCsrf::mint()),
         ]);
 
         $view->setTemplate('exelearning/editor-bootstrap');
@@ -154,23 +154,30 @@ class EditorController extends AbstractActionController
     }
 
     /**
-     * Build the normalized `previewHttp` block the embedded editor reads from
-     * `window.__EXE_EMBEDDING_CONFIG__` to drive the opaque HTTP preview
-     * transport (serving contract v2 §1). Both URLs are derived from the same
+     * Build the `previewSnapshot` block the embedded editor reads from
+     * `window.__EXE_EMBEDDING_CONFIG__` to drive the opaque preview. The editor
+     * POSTs the whole project as one ZIP to the management URL and loads the
+     * capability URL it gets back. All URLs derive from the same
      * `serverUrl + basePath` origin as `saveEndpoint`, so a subdirectory or
      * php-wasm playground install resolves them identically. The CSRF token is
      * sent (via `managementHeaders`) on every management request.
+     *
+     * deleteUrlTemplate is not optional: the editor's default delete target
+     * appends /{previewId} to managementUrl, which happens to be right here, but
+     * stating it keeps the wire contract explicit rather than relying on that
+     * coincidence.
      *
      * @param string $origin    serverUrl + basePath (no trailing slash).
      * @param string $csrfToken Long-lived preview CSRF token (PreviewCsrf::mint()).
      * @return array
      */
-    protected function buildPreviewHttpConfig(string $origin, string $csrfToken): array
+    protected function buildPreviewSnapshotConfig(string $origin, string $csrfToken): array
     {
+        $management = $origin . '/api/exelearning/preview-session';
         return [
-            'protocolVersion' => 2,
-            'managementBaseUrl' => $origin . '/api/exelearning/preview-session',
+            'managementUrl' => $management,
             'servingBaseUrl' => $origin . '/exelearning/preview',
+            'deleteUrlTemplate' => $management . '/{previewId}',
             'managementHeaders' => ['X-CSRF-Token' => $csrfToken],
         ];
     }

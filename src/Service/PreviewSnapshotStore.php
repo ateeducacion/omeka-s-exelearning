@@ -139,6 +139,39 @@ class PreviewSnapshotStore
     }
 
     /**
+     * Traversal-safe normalization for the exact-key layer lookups. Decodes one
+     * percent-encoding layer, strips NUL bytes, normalizes slashes, drops empty
+     * and "." segments, rejects any "..", and defaults to index.html.
+     *
+     * A double-encoded traversal (`%252e%252e%252f…`) survives a single decode
+     * as a literal `%2e%2e` segment — not a `..` — so it is never a traversal:
+     * it simply names a non-existent exact key and 404s. The lookups are exact
+     * map / file-in-`documents` reads, never path arithmetic from client input,
+     * so a surviving literal segment can only miss.
+     *
+     * @param string $path
+     * @return string|null Normalized key, or null if it tries to escape.
+     */
+    public static function normalizePath(string $path): ?string
+    {
+        $path = urldecode($path);
+        $path = str_replace(["\0", '\\'], ['', '/'], $path);
+
+        $parts = [];
+        foreach (explode('/', $path) as $segment) {
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+            if ($segment === '..') {
+                return null;
+            }
+            $parts[] = $segment;
+        }
+
+        return $parts === [] ? 'index.html' : implode('/', $parts);
+    }
+
+    /**
      * Resolve a snapshot's content directory for an authless serving request and
      * refresh its idle clock, so a preview in use never expires under the author.
      */

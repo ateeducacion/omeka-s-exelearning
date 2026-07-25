@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace ExeLearning\Controller;
 
-use ExeLearning\Service\PreviewSessionStore;
+use ExeLearning\Service\PreviewSnapshotStore;
 use Laminas\Http\Response as HttpResponse;
 use Laminas\Mvc\Controller\AbstractActionController;
 
@@ -20,7 +20,7 @@ use Laminas\Mvc\Controller\AbstractActionController;
  * the same Laminas serving primitive (Response + addHeaderLine + traversal-safe
  * path normalization + 404), the same opaque-origin philosophy, and the same
  * sandbox token set as ExeLearning\Service\IframeSandbox. It differs in the
- * lookup: bytes resolve from an ephemeral PreviewSessionStore keyed by an
+ * lookup: bytes resolve from an ephemeral PreviewSnapshotStore keyed by an
  * unguessable previewId (a server-minted UUID) + idle TTL — never from the real
  * filesystem for documents/assets, and only through the fixed-resource manifest
  * (server-controlled data) for the fixed layer.
@@ -92,15 +92,15 @@ class PreviewController extends AbstractActionController
         'txt' => 'text/plain',
     ];
 
-    /** @var PreviewSessionStore|null Ephemeral session store (null in helper unit tests). */
-    private ?PreviewSessionStore $store;
+    /** @var PreviewSnapshotStore|null Snapshot store (null in helper unit tests). */
+    private ?PreviewSnapshotStore $store;
 
     /**
-     * @param PreviewSessionStore|null $store Injected by the factory in Omeka;
+     * @param PreviewSnapshotStore|null $store Injected by the factory in Omeka;
      *                                        null when only the pure helpers are
      *                                        unit-tested.
      */
-    public function __construct(?PreviewSessionStore $store = null)
+    public function __construct(?PreviewSnapshotStore $store = null)
     {
         $this->store = $store;
     }
@@ -237,7 +237,34 @@ class PreviewController extends AbstractActionController
         if ($this->store === null) {
             return null;
         }
-        return $this->store->resolveForServing($previewId, $path);
+        $dir = $this->store->contentDir($previewId);
+        if ($dir === null) {
+            return null;
+        }
+        // normalizePath() already refused traversal, but the result is joined to
+        // a real directory here and the resolved path confirmed to sit under the
+        // snapshot root, so a symlink cannot aim the response outside it.
+        $root = realpath($dir);
+        $real = realpath($dir . '/' . $path);
+        if ($root === false || $real === false || !is_file($real)) {
+            return null;
+        }
+        if (strpos($real, $root . DIRECTORY_SEPARATOR) !== 0) {
+            return null;
+        }
+        $bytes = @file_get_contents($real);
+        if ($bytes === false) {
+            return null;
+        }
+        // A scriptable document is rewritten on every opaque refresh, so it is
+        // never cached; everything else revalidates with an ETag and supports
+        // Range, which is what makes a video inside the snapshot seekable.
+        $scriptable = $this->isScriptableDocument($this->contentTypeFor($path));
+        return [
+            'kind' => $scriptable ? 'document' : 'asset',
+            'bytes' => $bytes,
+            'etag' => md5($bytes),
+        ];
     }
 
     /**
@@ -382,7 +409,7 @@ class PreviewController extends AbstractActionController
 
     /**
      * Traversal-safe path normalization for the exact-key layer lookup.
-     * Delegates to the single source of truth on PreviewSessionStore so the
+     * Delegates to the single source of truth on PreviewSnapshotStore so the
      * serving route and the revision validator normalize identically.
      *
      * @param string $path
@@ -390,7 +417,7 @@ class PreviewController extends AbstractActionController
      */
     private function normalizePath(string $path): ?string
     {
-        return PreviewSessionStore::normalizePath($path);
+        return PreviewSnapshotStore::normalizePath($path);
     }
 
     /**

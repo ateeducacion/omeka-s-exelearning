@@ -10,7 +10,7 @@
  * @var array $config
  * @var string $editorBaseUrl
  * @var array $themeRegistryOverride
- * @var array|null $previewHttp Normalized HTTP preview transport config
+ * @var array|null $previewSnapshot Opaque preview snapshot transport config
  *      (serving contract v2 §1); absent on the anonymous export bootstrap.
  */
 
@@ -39,8 +39,8 @@ $themeOverrideJson = json_encode(
 
 // Normalized HTTP preview transport config (serving contract v2 §1). Null on
 // the anonymous export-only bootstrap, which never previews.
-$previewHttpJson = json_encode(
-    $previewHttp ?? null,
+$previewSnapshotJson = json_encode(
+    $previewSnapshot ?? null,
     JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP
 );
 
@@ -143,7 +143,7 @@ $configScript = <<<SCRIPT
             // Opaque HTTP preview transport (serving contract v2). When present
             // the editor selects the HttpPreviewProvider; null (export bootstrap)
             // leaves preview unconfigured. There is no srcdoc fallback.
-            previewHttp: {$previewHttpJson},
+            previewSnapshot: {$previewSnapshotJson},
         };
 
         // Disable NEW service worker registrations from inside the editor to

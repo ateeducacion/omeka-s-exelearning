@@ -42,8 +42,7 @@ return [
         'factories' => [
             Service\ElpFileService::class => Service\ElpFileServiceFactory::class,
             Service\StylesService::class => Service\StylesServiceFactory::class,
-            Service\PreviewFixedResources::class => Service\PreviewFixedResourcesFactory::class,
-            Service\PreviewSessionStore::class => Service\PreviewSessionStoreFactory::class,
+            Service\PreviewSnapshotStore::class => Service\PreviewSnapshotStoreFactory::class,
         ],
     ],
 
@@ -175,9 +174,9 @@ return [
                             ],
                         ],
                     ],
-                    // Authenticated, owner-scoped preview-session management API
-                    // (serving contract v2). The serving route is separate and
-                    // authless (see exelearning-preview above).
+                    // Authenticated, owner-scoped snapshot management API. The
+                    // serving route is separate and authless (see
+                    // exelearning-preview above).
                     'preview-session-create' => [
                         'type' => Literal::class,
                         'options' => [
@@ -185,32 +184,6 @@ return [
                             'defaults' => [
                                 'controller' => 'PreviewSession',
                                 'action' => 'create',
-                            ],
-                        ],
-                    ],
-                    'preview-session-assets' => [
-                        'type' => Segment::class,
-                        'options' => [
-                            'route' => '/preview-session/:id/assets',
-                            'constraints' => [
-                                'id' => '[0-9a-f-]{36}',
-                            ],
-                            'defaults' => [
-                                'controller' => 'PreviewSession',
-                                'action' => 'assets',
-                            ],
-                        ],
-                    ],
-                    'preview-session-revisions' => [
-                        'type' => Segment::class,
-                        'options' => [
-                            'route' => '/preview-session/:id/revisions',
-                            'constraints' => [
-                                'id' => '[0-9a-f-]{36}',
-                            ],
-                            'defaults' => [
-                                'controller' => 'PreviewSession',
-                                'action' => 'revisions',
                             ],
                         ],
                     ],
