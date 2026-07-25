@@ -220,6 +220,20 @@ package:
 		echo "Error: VERSION not specified. Use 'make package VERSION=1.2.3'"; \
 		exit 1; \
 	fi
+	@# The embedded editor is a release artifact (ADR-0001): never produce a
+	@# package without a valid bundled editor.
+	@if [ ! -r dist/static/index.html ]; then \
+		echo "Error: dist/static/index.html is missing or unreadable. Build the editor with 'make build-editor' before packaging." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -d dist/static/app ] && [ ! -d dist/static/libs ] && [ ! -d dist/static/files ]; then \
+		echo "Error: dist/static/ is missing the expected editor asset directories (app/, libs/ or files/)." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f .editor-version ] || [ -z "$$(tr -d '[:space:]' < .editor-version)" ]; then \
+		echo "Error: .editor-version is missing or empty; it must name the bundled editor version." >&2; \
+		exit 1; \
+	fi
 	@echo "Updating version to $(VERSION) in module.ini..."
 	$(SED_INPLACE) 's/^\([[:space:]]*version[[:space:]]*=[[:space:]]*\).*$$/\1"$(VERSION)"/' config/module.ini
 	@echo "Creating ZIP archive: ExeLearning-$(VERSION).zip..."

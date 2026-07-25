@@ -175,24 +175,6 @@ return [
                             ],
                         ],
                     ],
-                    'install-editor' => [
-                        'type' => Literal::class,
-                        'options' => [
-                            'route' => '/install-editor',
-                            'defaults' => [
-                                'action' => 'installEditor',
-                            ],
-                        ],
-                    ],
-                    'install-editor-status' => [
-                        'type' => Literal::class,
-                        'options' => [
-                            'route' => '/install-editor-status',
-                            'defaults' => [
-                                'action' => 'installEditorStatus',
-                            ],
-                        ],
-                    ],
                     // Authenticated, owner-scoped preview-session management API
                     // (serving contract v2). The serving route is separate and
                     // authless (see exelearning-preview above).
@@ -261,28 +243,6 @@ return [
                                 '__NAMESPACE__' => 'ExeLearning\Controller',
                                 'controller' => 'Editor',
                                 'action' => 'index',
-                            ],
-                        ],
-                    ],
-                    'exelearning-install' => [
-                        'type' => Literal::class,
-                        'options' => [
-                            'route' => '/exelearning/install-editor',
-                            'defaults' => [
-                                '__NAMESPACE__' => 'ExeLearning\Controller',
-                                'controller' => 'Editor',
-                                'action' => 'installEditor',
-                            ],
-                        ],
-                    ],
-                    'exelearning-install-status' => [
-                        'type' => Literal::class,
-                        'options' => [
-                            'route' => '/exelearning/install-editor-status',
-                            'defaults' => [
-                                '__NAMESPACE__' => 'ExeLearning\Controller',
-                                'controller' => 'Editor',
-                                'action' => 'installEditorStatus',
                             ],
                         ],
                     ],

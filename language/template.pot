@@ -148,5 +148,9 @@ msgid "Formats offered by the download split-button on embedded eXeLearning cont
 msgstr ""
 
 #: src/Service/DownloadFormats.php
-msgid "Install the eXeLearning editor from Module → Settings to enable this format."
+msgid "This format requires the embedded editor, which is not included in this installation."
+msgstr ""
+
+#: src/Controller/EditorController.php Module.php
+msgid "This installation does not include the embedded editor, so editing eXeLearning content is disabled. Official release packages include it; development checkouts must build it with \"make build-editor\"."
 msgstr ""

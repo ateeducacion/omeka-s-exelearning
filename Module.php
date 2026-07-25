@@ -13,8 +13,8 @@ use Omeka\Mvc\Controller\Plugin\Messenger;
 use Omeka\Stdlib\Message;
 use ExeLearning\Form\ConfigForm;
 use ExeLearning\Service\DownloadFormats;
+use ExeLearning\Service\EditorBundle;
 use ExeLearning\Service\IframeSandbox;
-use ExeLearning\Service\StaticEditorInstaller;
 
 /**
  * Main class for the ExeLearning module.
@@ -112,6 +112,47 @@ class Module extends AbstractModule
         $messenger = new Messenger();
         $message = new Message("ExeLearning module uninstalled.");
         $messenger->addWarning($message);
+
+        $this->removeEditorInstallerSettings($serviceLocator);
+    }
+
+    /**
+     * Execute logic when the module is upgraded.
+     *
+     * @param string $oldVersion
+     * @param string $newVersion
+     * @param ServiceLocatorInterface $serviceLocator
+     */
+    public function upgrade($oldVersion, $newVersion, ServiceLocatorInterface $serviceLocator)
+    {
+        $this->removeEditorInstallerSettings($serviceLocator);
+    }
+
+    /**
+     * Drop the settings left behind by the removed runtime editor installer.
+     *
+     * The embedded editor became a release artifact bundled inside the module
+     * package (ADR-0001), so the runtime installer and its bookkeeping are
+     * gone. Deleting the keys is idempotent and safe to run on every upgrade.
+     *
+     * @param ServiceLocatorInterface $serviceLocator
+     */
+    protected function removeEditorInstallerSettings(ServiceLocatorInterface $serviceLocator): void
+    {
+        $settings = $serviceLocator->get('Omeka\Settings');
+        $legacyKeys = [
+            'exelearning_editor_installed_version',
+            'exelearning_editor_installed_at',
+            'exelearning_editor_install_phase',
+            'exelearning_editor_install_message',
+            'exelearning_editor_install_target_version',
+            'exelearning_editor_install_started_at',
+            'exelearning_editor_install_success',
+            'exelearning_editor_install_error',
+        ];
+        foreach ($legacyKeys as $key) {
+            $settings->delete($key);
+        }
     }
 
     /**
@@ -781,7 +822,7 @@ JS
 
         $formHtml = $renderer->formCollection($form, false);
 
-        return $this->renderEditorStatusSection($renderer, $settings)
+        return $this->renderEditorStatusSection($renderer)
             . $this->renderStylesSection($renderer)
             . $formHtml;
     }
@@ -814,135 +855,37 @@ JS
     }
 
     /**
-     * Render the embedded editor status and install section.
+     * Warn when the bundled editor is missing.
+     *
+     * The editor ships inside the module package (ADR-0001), so in a normal
+     * installation there is nothing to show or do here; the section only
+     * appears when the bundle is absent (e.g. a development checkout that has
+     * not run `make build-editor`).
      *
      * @param PhpRenderer $renderer
-     * @param mixed $settings Omeka settings service
      * @return string
      */
-    protected function renderEditorStatusSection(PhpRenderer $renderer, $settings): string
+    protected function renderEditorStatusSection(PhpRenderer $renderer): string
     {
-        $isInstalled = StaticEditorInstaller::isEditorInstalled();
-        $version = $settings->get(StaticEditorInstaller::SETTING_VERSION, '');
-        $installedAt = $settings->get(StaticEditorInstaller::SETTING_INSTALLED_AT, '');
+        if (EditorBundle::isAvailable()) {
+            return '';
+        }
 
         $translate = function ($text) use ($renderer) {
             return $renderer->translate($text);
         };
 
-        // Get CSRF token from the page form element.
-        $csrf = new \Laminas\Form\Element\Csrf('csrf');
-        $csrfValue = $csrf->getValue();
-
         $html = '<fieldset id="exelearning-editor-status">';
         $html .= '<legend>' . $renderer->escapeHtml($translate('Embedded Editor')) . '</legend>'; // @translate
-
-        // Status display
-        $html .= '<div class="field"><div class="field-meta">';
-        $html .= '<label>' . $renderer->escapeHtml($translate('Status')) . '</label>'; // @translate
-        $html .= '</div><div class="inputs">';
-        $html .= '<span id="exelearning-status-icon">';
-        if ($isInstalled) {
-            $html .= '<span style="color: #46b450;">&#10003;</span> ';
-            $html .= '<span id="exelearning-status-text">' . $renderer->escapeHtml($translate('Installed')) . '</span>'; // @translate
-            if ($version) {
-                $html .= ' &mdash; v<span id="exelearning-installed-version">' . $renderer->escapeHtml($version) . '</span>';
-            }
-            if ($installedAt) {
-                $html .= ' (' . $renderer->escapeHtml($translate('installed on'));  // @translate
-                $html .= ' <span id="exelearning-installed-at">' . $renderer->escapeHtml($installedAt) . '</span>)';
-            }
-        } else {
-            $html .= '<span style="color: #dc3232;">&#10007;</span> ';
-            $html .= '<span id="exelearning-status-text">' . $renderer->escapeHtml($translate('Not installed')) . '</span>'; // @translate
-            $html .= '<span id="exelearning-installed-version" style="display:none;"></span>';
-            $html .= '<span id="exelearning-installed-at" style="display:none;"></span>';
-        }
-        $html .= '</span>';
-        $html .= '</div></div>';
-
-        // Install/update button + status area
         $html .= '<div class="field"><div class="field-meta"></div><div class="inputs">';
-        if (!$isInstalled) {
-            $html .= '<p id="exelearning-status-description">';
-            $html .= $renderer->escapeHtml($translate( // @translate
-                'The embedded eXeLearning editor is not installed.'
-                . ' You can download and install the latest version automatically from GitHub.'
-            ));
-            $html .= '</p>';
-        } else {
-            $html .= '<p id="exelearning-status-description" style="display:none;"></p>';
-        }
-
-        $buttonLabel = $isInstalled
-            ? $renderer->escapeHtml($translate('Update to Latest Version')) // @translate
-            : $renderer->escapeHtml($translate('Download & Install Editor')); // @translate
-        $buttonClass = $isInstalled ? 'button' : 'button active';
-        $html .= '<button type="button" id="exelearning-install-btn" class="' . $buttonClass . '">';
-        $html .= $buttonLabel;
-        $html .= '</button>';
-
-        // Progress area (hidden by default)
-        $html .= '<div id="exelearning-install-progress" style="display: none; margin-top: 10px;">';
-        $html .= '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">';
-        $html .= '<span class="o-icon-transmit" aria-hidden="true"></span>';
-        $html .= '<span id="exelearning-install-message"></span>';
-        $html .= '</div>';
-        $html .= '<div style="background: #e0e0e0; border-radius: 4px; height: 8px; width: 100%; max-width: 400px; overflow: hidden;">';
-        $html .= '<div id="exelearning-install-bar" style="background: #087cb8; height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 4px;"></div>';
-        $html .= '</div>';
-        $html .= '</div>';
-
-        // Result area (hidden by default)
-        $html .= '<div id="exelearning-install-result" style="display: none; margin-top: 10px;"></div>';
-
-        $html .= '</div></div>';
-
-        $html .= '<div class="field"><div class="field-meta"></div><div class="inputs">';
-        $html .= '<p class="explanation">';
-        $html .= sprintf(
-            $renderer->escapeHtml($translate('Developers can also build the editor from source using %s.')), // @translate
-            '<code>make build-editor</code>'
-        );
+        $html .= '<p><span style="color: #dc3232;">&#10007;</span> ';
+        $html .= $renderer->escapeHtml($translate( // @translate
+            'This installation does not include the embedded editor, so editing eXeLearning content is disabled.'
+            . ' Official release packages include it; development checkouts must build it with "make build-editor".'
+        ));
         $html .= '</p>';
         $html .= '</div></div>';
-
         $html .= '</fieldset>';
-
-        // Configuration for the external installer JS
-        $installUrl = $renderer->serverUrl() . $renderer->basePath() . '/admin/exelearning/install-editor';
-        $statusUrl = $renderer->serverUrl() . $renderer->basePath() . '/admin/exelearning/install-editor-status';
-        $jsConfig = [
-            'installUrl' => $installUrl,
-            'statusUrl' => $statusUrl,
-            'csrfToken' => $csrfValue,
-            'strings' => [
-                'pleaseWait' => $translate('Please wait...'), // @translate
-                'checking' => $translate('Checking latest version...'), // @translate
-                'installing' => $translate('Installing editor...'), // @translate
-                'downloading' => $translate('Downloading editor...'), // @translate
-                'extracting' => $translate('Extracting editor package...'), // @translate
-                'validating' => $translate('Validating editor files...'), // @translate
-                'error' => $translate('Installation failed.'), // @translate
-                'networkError' => $translate('Network error. Please check your connection and try again.'), // @translate
-                'tryAgain' => $translate('Try Again'), // @translate
-                'working' => $translate('Still working...'), // @translate
-                'timeout' => $translate('The installation is taking longer than expected. Checking status...'), // @translate
-                'stalled' => $translate('The previous installation appears to have stalled. Please try again.'), // @translate
-                'installed' => $translate('Installed'), // @translate
-                'notInstalled' => $translate('Not installed'), // @translate
-                'installedOn' => $translate('installed on'), // @translate
-                'notInstalledDescription' => $translate(
-                    'The embedded eXeLearning editor is not installed.'
-                    . ' You can download and install the latest version automatically from GitHub.'
-                ), // @translate
-                'successDefault' => $translate('Editor installed successfully.'), // @translate
-            ],
-        ];
-
-        $html .= '<script>window.exelearningInstaller = ' . json_encode($jsConfig) . ';</script>';
-        $html .= '<script src="' . $renderer->escapeHtmlAttr($renderer->assetUrl('js/exelearning-installer.js', 'ExeLearning'))
-            . '"></script>';
 
         return $html;
     }
