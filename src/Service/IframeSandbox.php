@@ -202,7 +202,22 @@ final class IframeSandbox
             'mode' => self::embedMode($embedMode),
             'whitelist' => self::embedWhitelist(),
         ]);
-        $view->headScript()->appendScript('window.ExeEmbedRelayConfig=' . $config . ';');
-        $view->headScript()->appendFile($view->assetUrl('js/exe-embed-relay.js', 'ExeLearning'));
+        // ONE vendored artifact (asset/js/exe_external_media/), built and published by
+        // eXeLearning core, replacing the separate embed relay. It carries the media half
+        // too, so the interactive-video iDevice works here without a second file.
+        //
+        // eXeLearning core is canonical (eXe ADR-0021): this module holds the BYTES and
+        // verifies them against the shipped manifest rather than a copy of the logic that
+        // could drift. Do NOT patch it here -- a local edit is invisible upstream, is
+        // overwritten on the next re-vendor, and fails
+        // `node asset/js/exe_external_media/verify.mjs` in CI in the meantime.
+        $view->headScript()->appendFile(
+            $view->assetUrl('js/exe_external_media/exe-external-media-host.min.js', 'ExeLearning')
+        );
+        // Explicit init: the canonical bundle does NOT auto-start from a global, because
+        // the policy it applies is the embedding page's decision and a host that guessed
+        // would have to guess permissively. The old relay auto-started from
+        // window.ExeEmbedRelayConfig; that global is gone with it.
+        $view->headScript()->appendScript('window.exeEmbedRelay.init(' . $config . ');');
     }
 }

@@ -250,7 +250,7 @@ class ContentController extends AbstractActionController
      * In secure mode the content runs opaque, so cross-origin players (YouTube,
      * Vimeo, …) and PDFs render blank. The shim replaces each whitelisted/PDF iframe
      * with a placeholder and reports its geometry to the parent, which overlays the
-     * real player inline (see asset/js/exe-embed-shim.js + exe-embed-relay.js).
+     * real player inline (see asset/js/exe_external_media/, both halves in one bundle).
      * No-op in legacy mode.
      */
     protected function injectEmbedShim(string $html): string
@@ -259,7 +259,11 @@ class ContentController extends AbstractActionController
             return $html;
         }
 
-        $shimPath = dirname(__DIR__, 2) . '/asset/js/exe-embed-shim.js';
+        // The CHILD half of the external-media bundle, vendored from eXeLearning core and
+        // verified against its manifest (eXe ADR-0021). Dormant until this page's host
+        // answers its handshake, so content served without one is left exactly as
+        // authored (eXe ADR-0017).
+        $shimPath = dirname(__DIR__, 2) . '/asset/js/exe_external_media/exe-external-media-child.min.js';
         $shim = is_readable($shimPath) ? file_get_contents($shimPath) : false;
         if ($shim === false || $shim === '') {
             return $html;

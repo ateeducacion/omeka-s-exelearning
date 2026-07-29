@@ -18,6 +18,10 @@ class PhpRenderer
         $this->headScript = new class {
             /** @var array<int, string> */
             public array $files = [];
+            /** @var array<int, string> Inline scripts, RECORDED: a stub that discards them
+             *  cannot answer "was the relay initialised, and once?" — which is exactly the
+             *  question the external-media migration made worth asking. */
+            public array $scripts = [];
             public function appendFile(string $url, $type = null): self
             {
                 $this->files[] = $url;
@@ -25,6 +29,7 @@ class PhpRenderer
             }
             public function appendScript(string $script): self
             {
+                $this->scripts[] = $script;
                 return $this;
             }
         };

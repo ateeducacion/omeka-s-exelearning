@@ -18,6 +18,16 @@
  * logic identical to core; only the export wrapper differs (this one is an auto-running
  * IIFE). scripts/check-embed-sync.mjs in eXe core flags drift.
  * Part of the eXeLearning embedder family (Omeka S module).
+ *
+ * Copyright (C) 2026 eXeLearning Team
+ *
+ * Dual-licensed so this ONE file can ship inside eXeLearning (AGPL-3.0-or-later)
+ * and inside the GPL-3.0-or-later host plugins (mod_exelearning) without either
+ * project relicensing it. GPLv3 s13 and AGPLv3 s13 already permit COMBINING the
+ * two, but combining never relicenses a file: only the copyright holder can offer
+ * it under both, which is what this grant does. Keep this notice in every mirror.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR GPL-3.0-or-later
  */
 ( function () {
 	'use strict';
@@ -219,9 +229,26 @@
 		} );
 	}
 
-	function init() {
-		promote();
-		report( true );
+	// Re-announcement schedule (ms after the previous attempt). The parent relay is
+	// loaded lazily by its page, so it may start listening after this document has
+	// already run. Announcing more than once closes that race without ever
+	// promoting on our own authority.
+	var ANNOUNCE_DELAYS = [ 250, 750, 1500, 3000 ];
+	var activated = false;
+
+	function announce( index ) {
+		if ( activated ) {
+			return;
+		}
+		window.parent.postMessage( { type: 'exe-embed', action: 'hello' }, '*' );
+		if ( index < ANNOUNCE_DELAYS.length ) {
+			window.setTimeout( function () {
+				announce( index + 1 );
+			}, ANNOUNCE_DELAYS[ index ] );
+		}
+	}
+
+	function observe() {
 		if ( window.MutationObserver ) {
 			// Observe attributes too, not just childList: layout-affecting UI (the
 			// exported page's nav toggle, accordions) usually flips a class/style on an
@@ -257,17 +284,61 @@
 		window.addEventListener( 'load', function () {
 			report( true );
 		} );
-		// The parent may ask for a fresh report (closes the load-order race).
+	}
+
+	// Promote for the first time. Only ever reached from an addressed 'welcome'.
+	function activate() {
+		if ( activated ) {
+			return;
+		}
+		activated = true;
+		observe();
+		promote();
+		report( true );
+	}
+
+	/*
+	 * The shim NEVER promotes an embed on its own authority: it announces itself and
+	 * waits for the relay to answer. Without that answer the document is left exactly
+	 * as authored, because an unanswered placeholder is a permanent black box —
+	 * strictly worse than an unprotected embed — and this file travels inside content
+	 * that is routinely opened where no relay exists (file://, a third-party LMS, an
+	 * ePub reader). Note file:// is itself an opaque origin, so "opaque" alone can
+	 * never be the activation signal.
+	 *
+	 * 'welcome' is ADDRESSED (the relay resolved this exact window before replying)
+	 * and is the only unlock. 'request' is the relay's geometry ping, BROADCAST to
+	 * every content frame without resolving any of them, so it may never unlock; while
+	 * dormant it only prompts another hello, recovering a relay that started late.
+	 */
+	function init() {
 		window.addEventListener( 'message', function ( event ) {
 			if ( event.source !== window.parent ) {
 				return;
 			}
 			var data = event.data;
-			if ( data && 'exe-embed' === data.type && 'request' === data.action ) {
-				promote();
-				report( true );
+			if ( ! data || 'exe-embed' !== data.type ) {
+				return;
+			}
+			if ( 'welcome' === data.action ) {
+				if ( activated ) {
+					promote();
+					report( true );
+				} else {
+					activate();
+				}
+				return;
+			}
+			if ( 'request' === data.action ) {
+				if ( activated ) {
+					promote();
+					report( true );
+				} else {
+					announce( 0 );
+				}
 			}
 		} );
+		announce( 0 );
 	}
 
 	if ( 'loading' === document.readyState ) {

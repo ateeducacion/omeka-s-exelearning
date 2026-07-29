@@ -763,4 +763,68 @@ class ContentControllerTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
         $this->assertNull($response->getHeaders()->get('Content-Security-Policy'));
     }
+
+    /**
+     * El runtime inyectado en el contenido servido es el bundle CHILD canónico
+     * vendorizado desde el core de eXeLearning, no el shim al que sustituye.
+     *
+     * Se afirma sobre los BYTES y no sobre la ruta: la ruta es lo que cambia un refactor,
+     * los bytes son lo que ejecuta un alumno.
+     */
+    public function testInjectedChildRuntimeIsTheCanonicalBundle(): void
+    {
+        $path = dirname(__DIR__, 3) . '/asset/js/exe_external_media/exe-external-media-child.min.js';
+        $this->assertFileExists($path, 'el bundle child no está vendorizado');
+
+        $source = (string) file_get_contents($path);
+        // Un símbolo que solo define el bundle canónico.
+        $this->assertStringContainsString('exeExternalMediaChild', $source);
+        // Frontera de privilegio: la mitad de contenido no puede llevar la de confianza.
+        $this->assertStringNotContainsString('exeExternalMediaHost', $source);
+        // ADR-0018: estos bytes se redistribuyen dentro del contenido, la concesión viaja.
+        $this->assertStringContainsString('AGPL-3.0-or-later OR GPL-3.0-or-later', $source);
+    }
+
+    /**
+     * La copia vendorizada es idéntica byte a byte a lo que publicó el core.
+     *
+     * Este módulo guarda los BYTES y los verifica, en vez de una copia de la lógica que
+     * pueda divergir (eXe ADR-0021). El CI corre la misma comprobación con un buildHash
+     * fijado fuera; este test es su mitad local y rápida.
+     */
+    public function testVendoredArtifactMatchesItsManifest(): void
+    {
+        $dir = dirname(__DIR__, 3) . '/asset/js/exe_external_media/';
+        $manifest = json_decode((string) file_get_contents($dir . 'exe-external-media.manifest.json'), true);
+
+        $this->assertIsArray($manifest['files'] ?? null, 'el manifest no trae lista de ficheros');
+
+        foreach ($manifest['files'] as $half => $record) {
+            $this->assertFileExists($dir . $record['path'], "falta {$half}");
+            $this->assertSame(
+                $record['sha256'],
+                hash('sha256', (string) file_get_contents($dir . $record['path'])),
+                "{$half} no coincide con el digest publicado por el core"
+            );
+        }
+
+        // Editar fichero y digest a la vez es la forma obvia de burlar una comprobación
+        // por fichero, así que el buildHash cubre la propia lista de digests.
+        $keys = array_keys($manifest['files']);
+        sort($keys);
+        $lines = array_map(static fn ($k) => $k . ':' . $manifest['files'][$k]['sha256'], $keys);
+        $this->assertSame($manifest['buildHash'], hash('sha256', implode("\n", $lines)));
+    }
+
+    /** El control es postMessage crudo: ningún SDK de proveedor dentro del bundle host. */
+    public function testHostBundleCarriesNoProviderSdk(): void
+    {
+        $host = (string) file_get_contents(
+            dirname(__DIR__, 3) . '/asset/js/exe_external_media/exe-external-media-host.min.js'
+        );
+
+        $this->assertStringNotContainsString('YT.Player', $host);
+        $this->assertStringNotContainsString('Vimeo.Player', $host);
+        $this->assertStringContainsString('enablejsapi', $host);
+    }
 }

@@ -134,4 +134,92 @@ class IframeSandboxTest extends TestCase
         $this->assertSame(array_map('strtolower', $hosts), $hosts);
         $this->assertSame(array_values(array_unique($hosts)), $hosts);
     }
+
+    /**
+     * The external-media migration: this module vendors the BYTES eXeLearning core
+     * publishes rather than a copy of the logic, so what is asserted here is that the
+     * bundle is what gets enqueued -- not one of the three files it replaced.
+     */
+    public function testEnqueueEmbedRelayLoadsTheCanonicalBundle(): void
+    {
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+
+        \ExeLearning\Service\IframeSandbox::enqueueEmbedRelay($view, 'secure');
+
+        $files = $view->headScript()->files;
+        $this->assertCount(1, $files, 'one artifact, not three separate files');
+        $this->assertStringContainsString(
+            'exe_external_media/exe-external-media-host.min.js',
+            $files[0]
+        );
+    }
+
+    /**
+     * Superseded files must not be enqueued. Stated as its own assertion because "the
+     * bundle is present" would stay true if an old file were loaded alongside it, and a
+     * page carrying both would run two relays.
+     */
+    public function testEnqueueEmbedRelayLoadsNoSupersededFile(): void
+    {
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+
+        \ExeLearning\Service\IframeSandbox::enqueueEmbedRelay($view, 'secure');
+
+        $joined = implode(' ', $view->headScript()->files);
+        $this->assertStringNotContainsString('exe-embed-relay.js', $joined);
+        $this->assertStringNotContainsString('exe-media-policy.js', $joined);
+        $this->assertStringNotContainsString('exe-media-host.js', $joined);
+    }
+
+    /**
+     * The canonical bundle does NOT auto-start from a global: the policy it applies is the
+     * embedding page's decision, and a host that guessed would have to guess permissively.
+     * The old relay auto-started from window.ExeEmbedRelayConfig; that global is gone with
+     * the file that read it, so an explicit init is now load-bearing rather than optional.
+     */
+    public function testEnqueueEmbedRelayInitialisesTheHostExplicitly(): void
+    {
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+
+        \ExeLearning\Service\IframeSandbox::enqueueEmbedRelay($view, 'secure');
+
+        $scripts = implode("\n", $view->headScript()->scripts);
+        $this->assertStringContainsString('exeEmbedRelay.init(', $scripts);
+        $this->assertStringNotContainsString('ExeEmbedRelayConfig', $scripts);
+    }
+
+    /** The whitelist the host is given must be the one the module resolved. */
+    public function testEnqueueEmbedRelayPassesTheResolvedPolicy(): void
+    {
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+
+        \ExeLearning\Service\IframeSandbox::enqueueEmbedRelay($view, 'secure');
+
+        $scripts = implode("\n", $view->headScript()->scripts);
+        $this->assertStringContainsString('"mode":"strict"', $scripts);
+        $this->assertStringContainsString('youtube.com', $scripts);
+    }
+
+    /**
+     * Asking for legacy does NOT get you legacy. Without the escape hatch this module
+     * normalises every mode to secure (see testNormalizeModeIsAlwaysSecureWithoutEscapeHatch),
+     * so the bundle is enqueued regardless -- content is always served opaque and its embeds
+     * always promoted to the parent.
+     *
+     * Pinned here because it is the fail-closed direction and it is easy to break by
+     * "tidying" the mode check: an early return for legacy would silently reintroduce
+     * same-origin rendering for anyone who passed that string.
+     */
+    public function testEnqueueEmbedRelayStillLoadsWhenLegacyIsRequested(): void
+    {
+        $view = new \Laminas\View\Renderer\PhpRenderer();
+
+        \ExeLearning\Service\IframeSandbox::enqueueEmbedRelay($view, 'legacy');
+
+        $this->assertCount(1, $view->headScript()->files);
+        $this->assertStringContainsString(
+            'exe-external-media-host.min.js',
+            $view->headScript()->files[0]
+        );
+    }
 }
