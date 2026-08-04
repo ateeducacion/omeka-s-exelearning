@@ -5,6 +5,9 @@
 # PHPUnit cache files
 test/.phpunit.result.cache
 test/.phpunit.cache/
+
+# Coverage reports written by `make test-coverage`
+/artifacts/
 themes/
 
 # Built static editor - download from releases or build with `make build-editor`

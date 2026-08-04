@@ -23,4 +23,9 @@ class Settings
     {
         $this->store[$key] = $value;
     }
+
+    public function delete(string $key): void
+    {
+        unset($this->store[$key]);
+    }
 }
