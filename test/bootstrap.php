@@ -23,6 +23,13 @@ if (file_exists(dirname(__DIR__) . '/vendor/autoload.php')) {
 
 // Lightweight PSR-4 autoloader for tests and stubs
 spl_autoload_register(function (string $class): void {
+    // The module class sits at the repository root, per Omeka's module layout,
+    // so Composer's ExeLearning\ -> src/ mapping cannot reach it. Omeka loads
+    // it directly at bootstrap; tests and the coverage report need the same.
+    if ($class === 'ExeLearning\\Module') {
+        require dirname(__DIR__) . '/Module.php';
+        return;
+    }
     // Omeka test stubs
     if (strpos($class, 'Omeka\\') === 0) {
         $file = __DIR__ . '/Stubs/' . str_replace('\\', '/', $class) . '.php';

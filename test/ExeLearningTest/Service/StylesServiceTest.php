@@ -202,8 +202,8 @@ class StylesServiceTest extends TestCase
             'icons/activity.png' => 'PNG',
             'icons/alert.svg' => '<svg/>',
             'icons/photo.JPG' => 'JPEG',
+            // Allowed inside a package but not an image: must not become an icon.
             'icons/readme.txt' => 'ignore',
-            'icons/no-extension' => 'ignore',
         ]);
         $this->svc->installFromZip($zip);
 
@@ -219,6 +219,28 @@ class StylesServiceTest extends TestCase
         $this->assertSame('img', $activity['type']);
         $this->assertSame($entry['url'] . '/icons/activity.png', $activity['value']);
         @unlink($zip);
+    }
+
+    /**
+     * The extension allowlist rejects the whole package rather than skipping
+     * the offending entry, so an extensionless file must abort the install.
+     * This is the guard that silently broke the icons fixture above.
+     */
+    public function testInstallFromZipRejectsExtensionlessEntry(): void
+    {
+        $zip = $this->makeZip([
+            'config.xml' => $this->configXml('sneaky'),
+            'style.css'  => 'a{}',
+            'icons/no-extension' => 'ignore',
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('File type not allowed in style package: icons/no-extension');
+        try {
+            $this->svc->installFromZip($zip);
+        } finally {
+            @unlink($zip);
+        }
     }
 
     public function testScanUploadedIconsReturnsEmptyWhenIconsFolderMissing(): void

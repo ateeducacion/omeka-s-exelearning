@@ -1,5 +1,5 @@
 # eXeLearning
-![CI](https://img.shields.io/github/actions/workflow/status/exelearning/omeka-s-exelearning/ci.yml?label=CI)
+[![CI](https://img.shields.io/github/actions/workflow/status/exelearning/omeka-s-exelearning/ci.yml?branch=main&label=CI)](https://github.com/exelearning/omeka-s-exelearning/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/exelearning/omeka-s-exelearning/graph/badge.svg)](https://codecov.io/gh/exelearning/omeka-s-exelearning)
 ![Omeka S Version](https://img.shields.io/badge/Omeka_S-%3E%3D3.0-blue)
 ![PHP Version](https://img.shields.io/badge/PHP-%3E%3D%207.4-8892bf)
@@ -114,10 +114,19 @@ make up          # Start Docker environment (http://localhost:8080)
 make down        # Stop containers
 make lint        # Check code style
 make fix         # Auto-fix code style
+make test        # Run the unit tests
+make test-coverage  # Tests + coverage gate (what CI runs)
 make package VERSION=1.2.3  # Build a .zip release
 ```
 
 Default credentials: `admin@example.com` / `PLEASE_CHANGEME`
+
+`make test-coverage` is the blocking verification gate: it fails on any failing
+test and on line coverage below `MIN_COVERAGE` (90%), and writes its reports to
+`artifacts/coverage/`. Coverage is published to
+[Codecov](https://codecov.io/gh/exelearning/omeka-s-exelearning), which annotates
+pull requests but does not block them — see
+[ADR-0002](docs/architecture/adr/ADR-0002-verification-contract-coverage-gate-and-codecov.md).
 
 ### Architecture documentation
 

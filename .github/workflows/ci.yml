@@ -24,6 +24,10 @@ concurrency:
 
 permissions:
   contents: read
+  # Codecov authenticates with OIDC instead of a token kept as a secret.
+  # Without this permission no identity token can be issued, and uploads from
+  # a protected branch are rejected.
+  id-token: write
 
 jobs:
   lint_and_test:
@@ -85,5 +89,43 @@ jobs:
         run: make lint
 
       # === TESTS ===
+      # Fails on a failing test as well as on coverage below MIN_COVERAGE.
+      # Both gates live in the Make target so a laptop and CI agree.
       - name: Run unit tests with coverage
         run: make test-coverage
+
+      - name: Add coverage to job summary
+        if: always()
+        run: |
+          echo "## 📊 Code Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f artifacts/coverage/coverage.txt ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -E "^\s*(Classes|Methods|Lines):" artifacts/coverage/coverage.txt >> $GITHUB_STEP_SUMMARY \
+              || echo "No coverage data" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Coverage report not generated" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # === COVERAGE PUBLISHING ===
+      # OIDC, not a token: no CODECOV_TOKEN secret is configured, and uploads
+      # from the protected main branch are rejected without credentials.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        if: always()
+        with:
+          use_oidc: true
+          files: artifacts/coverage/clover.xml
+          flags: php
+          # Without this the uploader also sweeps up coverage.txt, a
+          # human-readable summary it cannot parse as a coverage report.
+          disable_search: true
+
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-report
+          path: artifacts/coverage/html/
+          retention-days: 30

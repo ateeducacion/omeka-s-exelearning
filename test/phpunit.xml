@@ -21,15 +21,24 @@
         </testsuite>
     </testsuites>
 
+    <!--
+        Reports are requested on the command line by `make test-coverage`, not
+        declared here, so plain `make test` does not pay for coverage it never
+        prints.
+    -->
     <coverage processUncoveredFiles="true">
         <include>
             <directory suffix=".php">../src</directory>
+            <!--
+                Module.php is a quarter of the codebase and holds every Omeka
+                event hook. It was outside the gate until the stubs under
+                test/Stubs/Omeka/Module/ made it loadable without an Omeka
+                runtime. See ADR-0002.
+            -->
+            <file>../Module.php</file>
         </include>
         <exclude>
             <directory suffix="Factory.php">../src</directory>
         </exclude>
-        <report>
-            <text outputFile="php://stdout" showUncoveredFiles="true"/>
-        </report>
     </coverage>
 </phpunit>

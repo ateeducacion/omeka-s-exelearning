@@ -241,11 +241,25 @@ final class DownloadFormats
      */
     public static function enqueueDownloadAssets($view): void
     {
-        static $enqueued = false;
-        if ($enqueued) {
+        // Keyed on the view instance rather than a plain flag: Omeka builds one
+        // PhpRenderer per request, so "once per view" is "once per request",
+        // and the guard no longer survives across the whole PHP process the way
+        // a function-static does. That difference only shows up under PHPUnit,
+        // where a single process renders many independent views and an
+        // unresettable flag silently disabled every assertion after the first.
+        //
+        // SplObjectStorage, not spl_object_id(): ids are recycled once an
+        // object is collected, so an id-keyed array could match a *new* view
+        // against a freed one and skip the enqueue. Holding the views costs one
+        // entry per request in production and a few hundred bytes under test.
+        static $enqueuedFor = null;
+        if ($enqueuedFor === null) {
+            $enqueuedFor = new \SplObjectStorage();
+        }
+        if ($enqueuedFor->contains($view)) {
             return;
         }
-        $enqueued = true;
+        $enqueuedFor->attach($view);
         $view->headScript()->appendFile(
             $view->assetUrl('js/omeka-exe-download.js', 'ExeLearning')
         );
