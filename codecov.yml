@@ -1,0 +1,35 @@
+# Codecov configuration.
+#
+# Statuses are informational: Codecov comments the coverage of every pull
+# request but never marks it as failed. The blocking gate lives in
+# `make test-coverage` (MIN_COVERAGE), which fails the build when line coverage
+# drops below the threshold -- one gate, in one place, that behaves identically
+# on a laptop and in CI. Codecov's job here is the per-file view and the diff
+# annotation, not a second verdict that could disagree with the first.
+#
+# To make these blocking, set `informational: false`.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# No `fixes:` stanza is needed. PHPUnit runs directly on the runner with the
+# repository as its working directory, so Clover records paths under
+# $GITHUB_WORKSPACE and Codecov maps them onto the repository unaided. (The
+# sibling wp-exelearning repo does need one, because its suite runs inside a
+# wp-env container where the plugin lives at an unrelated absolute path.)
+
+# A single PHP suite, uploaded under the `php` flag by the CI workflow.
+comment:
+  layout: "condensed_header, diff, flags, files"
+
+# Factories are excluded from the PHPUnit coverage report (they are one-line
+# service wiring); listing them here keeps Codecov's file tree consistent with
+# the report it receives instead of showing them as 0%.
+ignore:
+  - "src/**/*Factory.php"
+  - "test/**"

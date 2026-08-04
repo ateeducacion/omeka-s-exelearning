@@ -10,6 +10,7 @@ status, update the table and the per-status lists below.
 | ID | Title | Status | Date | Related SDD |
 |----|-------|--------|------|-------------|
 | [ADR-0001](ADR-0001-bundle-editor-exclusively-in-release-packages.md) | Bundle the embedded editor exclusively in release packages | Accepted | 2026-07-24 | — |
+| [ADR-0002](ADR-0002-verification-contract-coverage-gate-and-codecov.md) | Verification contract: what a green CI run means | Accepted | 2026-08-04 | — |
 
 ## Proposed ADRs
 
@@ -19,6 +20,8 @@ _No proposed ADRs yet._
 
 - [ADR-0001](ADR-0001-bundle-editor-exclusively-in-release-packages.md) —
   Bundle the embedded editor exclusively in release packages.
+- [ADR-0002](ADR-0002-verification-contract-coverage-gate-and-codecov.md) —
+  Verification contract: what a green CI run means.
 
 ## Superseded ADRs
 

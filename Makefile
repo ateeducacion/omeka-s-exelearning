@@ -193,23 +193,42 @@ test:
 	@echo "Running unit tests..."
 	@"vendor/bin/phpunit" -c test/phpunit.xml
 
+# Minimum line coverage enforced by `make test-coverage`. This is a ratchet:
+# raise it when coverage improves, never lower it to make a build pass.
+MIN_COVERAGE ?= 90
+
 test-coverage:
 	@echo "Running unit tests with coverage (requires xdebug or pcov)..."
-	@XDEBUG_MODE=coverage "vendor/bin/phpunit" -c test/phpunit.xml --coverage-text 2>&1 | tee /tmp/coverage-output.txt; \
-	COVERAGE=$$(sed 's/\x1b\[[0-9;]*m//g' /tmp/coverage-output.txt | grep -E "Lines:" | head -1 | sed -E 's/.*Lines:[[:space:]]+([0-9]+\.[0-9]+)%.*/\1/'); \
+	@mkdir -p artifacts/coverage
+	@# PHPUnit writes its own reports instead of the output being piped into
+	@# `tee`. With a pipe, the recipe's exit status is tee's, so failing tests
+	@# still reported success and only the coverage percentage was ever gated
+	@# -- CI ran green for weeks on a suite with two failures. /bin/sh has no
+	@# portable `pipefail`, so removing the pipe is the fix, not working around
+	@# it. clover.xml is what Codecov consumes.
+	@# pcov.directory is pinned to the repository root: left to auto-detect it
+	@# resolves somewhere under src/ and silently drops the root-level
+	@# Module.php from the report, so a pcov machine and an xdebug machine
+	@# (what CI uses) gate on different numbers. Harmless when pcov is absent.
+	@XDEBUG_MODE=coverage php -d pcov.directory="$(CURDIR)" "vendor/bin/phpunit" -c test/phpunit.xml \
+		--coverage-text=artifacts/coverage/coverage.txt \
+		--coverage-clover=artifacts/coverage/clover.xml \
+		--coverage-html=artifacts/coverage/html
+	@COVERAGE=$$(sed 's/\x1b\[[0-9;]*m//g' artifacts/coverage/coverage.txt | grep -E "Lines:" | head -1 | sed -E 's/.*Lines:[[:space:]]+([0-9]+\.[0-9]+)%.*/\1/'); \
 	echo ""; \
-	echo "Line coverage: $${COVERAGE}%"; \
 	if [ -z "$$COVERAGE" ]; then \
 		echo "Error: Could not parse coverage percentage"; \
 		exit 1; \
 	fi; \
+	echo "Line coverage: $${COVERAGE}%"; \
 	COVERAGE_INT=$$(echo "$$COVERAGE" | cut -d. -f1); \
-	if [ "$$COVERAGE_INT" -lt 90 ]; then \
-		echo "Error: Coverage ($${COVERAGE}%) is below minimum threshold (90%)"; \
+	if [ "$$COVERAGE_INT" -lt $(MIN_COVERAGE) ]; then \
+		echo "Error: Coverage ($${COVERAGE}%) is below minimum threshold ($(MIN_COVERAGE)%)"; \
 		exit 1; \
 	else \
-		echo "Coverage check passed: $${COVERAGE}% >= 90%"; \
+		echo "Coverage check passed: $${COVERAGE}% >= $(MIN_COVERAGE)%"; \
 	fi
+	@echo "Reports: artifacts/coverage/{coverage.txt,clover.xml,html/index.html}"
 
 # ============================================================================
 # Packaging

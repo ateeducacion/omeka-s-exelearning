@@ -1,6 +1,8 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file is the single source of agent guidance for this repository. `CLAUDE.md`
+and `.github/copilot-instructions.md` are one-line pointers to it, so there is
+one copy to keep correct rather than three that drift.
 
 ## Development Workflow
 
@@ -8,8 +10,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 make lint              # PHP_CodeSniffer PSR2 — must pass
 make test              # PHPUnit unit tests
-make test-coverage     # Tests + 90% coverage minimum (used in CI)
+make test-coverage     # Tests + MIN_COVERAGE gate (used in CI)
 ```
+
+`make test-coverage` is the single blocking verification gate: it fails on any
+failing test **and** on line coverage below `MIN_COVERAGE` (90). It measures
+`src/` plus the root `Module.php`, excluding factories, and writes its reports
+to `artifacts/coverage/` (`coverage.txt`, `clover.xml`, `html/`). Codecov
+receives `clover.xml` but is informational only. See
+[ADR-0002](docs/architecture/adr/ADR-0002-verification-contract-coverage-gate-and-codecov.md);
+`MIN_COVERAGE` is a ratchet — raise it, never lower it, and never narrow the
+measured set to lift the percentage.
 
 **Docker dev environment:**
 ```bash
@@ -31,8 +42,10 @@ make package VERSION=1.2.3
 ## Code Style
 
 - PSR2 standard enforced by phpcs. Run `make fix` to auto-fix.
-- Factories are excluded from coverage requirements.
-- Test stubs live in `test/Stubs/` — add new stubs there when Omeka/Laminas collaborators are needed.
+- Factories are excluded from coverage requirements — keep them to wiring only.
+- Test stubs live in `test/Stubs/` (framework classes the code type-hints or
+  extends) and test doubles in `test/ExeLearningTest/Doubles/` (collaborators
+  resolved by service name). The `omeka-s-testing` skill explains which is which.
 
 ## Git Conventions
 
@@ -43,9 +56,18 @@ make package VERSION=1.2.3
 
 See the Security & Architecture section below for the full system design. Key gotchas:
 - All ELPX content is served through `ContentController` (proxy) — never expose `/files/exelearning/` directly.
-- API endpoints validate CSRF tokens from session — always include `csrf_key` in API calls.
-- The module uses Omeka event hooks (`api.hydrate.post`, `api.create.post`, `api.delete.pre`, `view.show.after`) — check `Module.php` before adding new lifecycle behavior.
-- URL building uses `$request->getBasePath()` to support playground prefix environments.
+- State-changing endpoints validate CSRF via `CsrfValidationTrait`, which reads
+  the token from the `csrf` POST field, the `X-CSRF-Token` header or the `csrf`
+  query parameter and checks it with `Laminas\Validator\Csrf`. A missing token is
+  a rejection. CSRF is not authorization — follow it with an
+  `$acl->userIsAllowed('Omeka\Entity\Media', 'update')` check.
+- The module uses Omeka event hooks (`api.hydrate.post`, `api.create.post`,
+  `api.delete.pre`, `view.show.after`, `view.layout`, `rep.resource.json`) —
+  check `Module.php` before adding new lifecycle behavior.
+- URL building does **not** use `$request->getBasePath()`: it is unreliable in
+  the PHP-WASM playground, where the `/playground/{uuid}/php83/` prefix is
+  present in the request URI but absent from `$_SERVER['SCRIPT_NAME']`.
+  `Module::extractBasePath()` derives the prefix from the request URI instead.
 
 ## Architecture decisions and design documents
 
@@ -80,6 +102,41 @@ Significant technical work is documented alongside the code under
   architecture.
 - Keep all architecture docs in English. For PHP code, continue following the
   repository's coding standards and the testing/linting rules above.
+
+## Skills
+
+Recurring procedures and domain knowledge live as skills in `.agents/skills/`,
+the path GitHub Copilot, Codex and other agents read directly. Claude Code reads
+`.claude/skills/`, which contains **symlinks** to those same directories, not
+copies. When adding a skill, create it in `.agents/skills/` and link it from
+`.claude/skills/`; never duplicate a `SKILL.md`.
+
+Read the relevant skill *before* working in its area.
+
+| Skill | Read it before | Origin |
+| --- | --- | --- |
+| `omeka-s-module-development` | Touching `Module.php`, `config/module.config.php`, services/factories, the config form, ACL/CSRF boundaries or the on-disk layout | first-party |
+| `omeka-s-api-and-adapters` | Working with `api.*` / `rep.resource.json` events, media data, or the `/api/exelearning` endpoints | first-party |
+| `omeka-s-testing` | Writing tests, adding a stub or double, or diagnosing a coverage number | first-party |
+| `add-service` / `add-route` / `add-event` | Adding one of those, for the concrete file-by-file steps | first-party |
+| `i18n` | Running the translation pipeline | first-party |
+| `verify` | Running the full local verification pipeline | first-party |
+| `release` | Packaging a release | first-party |
+| `security-audit` | Hunting vulnerabilities and validating findings | [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill), vendored |
+
+**First-party skills describe this repository** and must be updated when the code
+they describe changes — a skill that documents a removed API is worse than no
+skill. **Vendored skills are third party and copied verbatim**: do not reformat
+or edit them in place, because diverging from upstream makes future updates
+harder. Fix the problem upstream and re-vendor instead. `security-audit` is
+shared with the sibling `wp-exelearning` repository.
+
+Skills are kept out of the release ZIP by `.distignore` and out of the source ZIP
+by `.gitattributes`. Those two files have separate jobs and must not be kept in
+sync with each other: `.distignore` is the only list `rsync` reads in
+`make package` and is the single source of truth for what ships, while
+`.gitattributes` only shapes the source ZIP GitHub serves at
+`archive/refs/heads/*.zip`, the one `blueprint.json` installs in Playground.
 
 ---
 
@@ -215,22 +272,28 @@ location ^~ /exelearning/content/ {
 
 ### 6. CSRF Protection
 
-API endpoints require a valid CSRF key:
+State-changing endpoints validate a CSRF token through the shared
+`ExeLearning\Controller\CsrfValidationTrait`. The token is read from the `csrf`
+POST field, the `X-CSRF-Token` header or the `csrf` query parameter, in that
+order, and validated against the session-bound `Laminas\Validator\Csrf`:
 
 ```php
-$csrfKey = $data['csrf_key'] ?? $request->getQuery('csrf_key');
-$session = Container::getDefaultManager()->getStorage();
-if (!$session || $csrfKey !== ($session['Omeka\Csrf'] ?? null)) {
+if (!$this->validateCsrf($request)) {
     return new ApiProblemResponse(new ApiProblem(403, 'Invalid CSRF token'));
 }
 ```
 
+A request that omits the token entirely is rejected — a missing token is never
+treated as "no check required", which is the bypass this trait closed.
+
 ### 7. ACL Permissions
 
-Edit functionality requires proper permissions:
+CSRF proves the request came from our page; it says nothing about whether the
+user may perform the action. Every state-changing endpoint therefore also asks
+the ACL, after the token check:
 
 ```php
-$acl = $this->getServiceLocator()->get('Omeka\Acl');
+$acl = $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Acl');
 if (!$acl->userIsAllowed('Omeka\Entity\Media', 'update')) {
     return new ApiProblemResponse(new ApiProblem(403, 'Permission denied'));
 }

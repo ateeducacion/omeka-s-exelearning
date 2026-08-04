@@ -195,11 +195,12 @@ final class DownloadFormatsTest extends TestCase
         $view = $this->makeView();
         DownloadFormats::enqueueDownloadAssets($view);
 
-        // Calling twice should not re-enqueue, but it should not error.
+        // Calling twice must not re-enqueue: exactly the file and the inline
+        // i18n payload, once each.
         DownloadFormats::enqueueDownloadAssets($view);
 
         $appended = $view->headScriptCalls;
-        $this->assertGreaterThanOrEqual(2, count($appended));
+        $this->assertCount(2, $appended, 'assets were enqueued more than once for the same view');
         $hasFile = false;
         $hasInline = false;
         foreach ($appended as $call) {
@@ -212,6 +213,22 @@ final class DownloadFormatsTest extends TestCase
         }
         $this->assertTrue($hasFile, 'omeka-exe-download.js was not enqueued');
         $this->assertTrue($hasInline, 'i18n inline script was not enqueued');
+    }
+
+    /**
+     * The once-only guard is scoped to a view, not to the PHP process. Omeka
+     * builds one renderer per request, so a second view means a second request
+     * and must get its own copy of the assets.
+     */
+    public function testEnqueueDownloadAssetsRunsAgainForADifferentView(): void
+    {
+        $first = $this->makeView();
+        DownloadFormats::enqueueDownloadAssets($first);
+        $this->assertCount(2, $first->headScriptCalls);
+
+        $second = $this->makeView();
+        DownloadFormats::enqueueDownloadAssets($second);
+        $this->assertCount(2, $second->headScriptCalls, 'a new view did not receive the assets');
     }
 
     /**

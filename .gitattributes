@@ -1,5 +1,17 @@
+# These rules only shape the source ZIP that GitHub serves at
+# archive/refs/heads/*.zip, the one blueprint.json installs in the Omeka S
+# Playground. They do NOT feed the release ZIP: that archive is built by
+# `make package` from .distignore, the single source of truth for what ships.
+# The two lists have separate jobs and are not kept in sync with each other.
 .aider*                  export-ignore
 .DS_Store                export-ignore
+/.agents/                export-ignore
+/.claude/                export-ignore
+/AGENTS.md               export-ignore
+/CLAUDE.md               export-ignore
+/artifacts/              export-ignore
+/codecov.yml             export-ignore
+/docs/                   export-ignore
 /.distignore             export-ignore
 /.editorconfig           export-ignore
 /.env                    export-ignore

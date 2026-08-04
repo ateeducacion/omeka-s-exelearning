@@ -1,20 +1,57 @@
+# Files and directories kept out of the release ZIP.
+#
+# `make package` copies the tree with `rsync --exclude-from=.distignore`, so
+# these are rsync patterns: a leading slash anchors to the package root, and an
+# unanchored rule matches at any depth (which is why `test/` also removes a
+# nested test directory, wherever it turns up).
+#
+# The bundled editor under dist/static/ is a release artifact and must stay in
+# the package -- see ADR-0001. Do not add a `dist` rule here.
+
+# VCS and CI
 .git
 .github
 .gitignore
+.gitattributes
+.distignore
+
+# Agent instructions and skills. Skills live in .agents/skills/, with
+# .claude/skills/ symlinking to them; neither belongs in a published module.
+.agents
+.claude
+AGENTS.md
+CLAUDE.md
+
+# Editor and local tooling leftovers
 .aider*
 .DS_Store
-.distignore
+.env
+
+# Build inputs. Only the built editor in dist/static/ ships; the editor
+# checkout it is built from does not.
 /exelearning/
-test/
 vendor/
 themes/
+
+# Tests, their caches, and the coverage reports they write
+test/
+test/.phpunit.result.cache
+test/.phpunit.cache/
+artifacts/
+
+# Development tooling and configuration
 phpmd.xml
+codecov.yml
 Makefile
 docker-compose.yml
 Dockerfile
 composer.json
 composer.lock
-CLAUDE.md
+blueprint.json
+renovate.json
+
+# Repository documentation. docs/ holds the ADR/SDD records, not user docs.
+docs/
+
+# Packaging output
 *.zip
-test/.phpunit.result.cache
-test/.phpunit.cache/
