@@ -75,7 +75,7 @@ class EditorController extends AbstractActionController
 
         if (!EditorBundle::isAvailable()) {
             // The editor ships inside the module package and is never
-            // downloaded at runtime (ADR-0001).
+            // downloaded at runtime (ADR-28-01).
             $this->messenger()->addWarning(
                 $this->translate('This installation does not include the embedded editor, so editing eXeLearning content is disabled. Official release packages include it; development checkouts must build it with "make build-editor".') // @translate
             );

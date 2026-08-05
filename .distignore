@@ -6,7 +6,7 @@
 # nested test directory, wherever it turns up).
 #
 # The bundled editor under dist/static/ is a release artifact and must stay in
-# the package -- see ADR-0001. Do not add a `dist` rule here.
+# the package -- see ADR-28-01. Do not add a `dist` rule here.
 
 # VCS and CI
 .git
@@ -39,7 +39,9 @@ test/.phpunit.result.cache
 test/.phpunit.cache/
 artifacts/
 
-# Development tooling and configuration
+# Development tooling and configuration. scripts/ holds the architecture-record
+# validator: a documentation linter, not module code.
+scripts/
 phpmd.xml
 codecov.yml
 Makefile
@@ -50,7 +52,7 @@ composer.lock
 blueprint.json
 renovate.json
 
-# Repository documentation. docs/ holds the ADR/SDD records, not user docs.
+# Repository documentation. docs/ holds the architecture records, not user docs.
 docs/
 
 # Packaging output

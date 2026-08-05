@@ -75,7 +75,7 @@ By default, `make build-editor` fetches `https://github.com/exelearning/exelearn
 EXELEARNING_EDITOR_REF=vX.Y.Z EXELEARNING_EDITOR_REF_TYPE=tag make build-editor
 ```
 
-> **Important:** For production use, always install an official release from [Releases](https://github.com/exelearning/omeka-s-exelearning/releases): release packages include the embedded editor pre-built under `dist/static/`, and that bundle is the only editor the module ever uses. The module never downloads editor code at runtime, and administrators cannot update the editor independently of the module — updating the editor means updating the module (a new module release is published automatically for every editor release). Source checkouts do not contain `dist/static/`; build it with `make build-editor` as shown above. See [ADR-0001](docs/architecture/adr/ADR-0001-bundle-editor-exclusively-in-release-packages.md).
+> **Important:** For production use, always install an official release from [Releases](https://github.com/exelearning/omeka-s-exelearning/releases): release packages include the embedded editor pre-built under `dist/static/`, and that bundle is the only editor the module ever uses. The module never downloads editor code at runtime, and administrators cannot update the editor independently of the module — updating the editor means updating the module (a new module release is published automatically for every editor release). Source checkouts do not contain `dist/static/`; build it with `make build-editor` as shown above. See [ADR-28-01](docs/architecture/adr/ADR-28-01-bundle-editor-exclusively-in-release-packages.md).
 
 ## Usage
 
@@ -112,7 +112,7 @@ npm run test:e2e:embed # serves the harness and runs the Firefox spec
 ```bash
 make up          # Start Docker environment (http://localhost:8080)
 make down        # Stop containers
-make lint        # Check code style
+make lint        # Check code style + validate the architecture records
 make fix         # Auto-fix code style
 make test        # Run the unit tests
 make test-coverage  # Tests + coverage gate (what CI runs)
@@ -126,14 +126,24 @@ test and on line coverage below `MIN_COVERAGE` (90%), and writes its reports to
 `artifacts/coverage/`. Coverage is published to
 [Codecov](https://codecov.io/gh/exelearning/omeka-s-exelearning), which annotates
 pull requests but does not block them — see
-[ADR-0002](docs/architecture/adr/ADR-0002-verification-contract-coverage-gate-and-codecov.md).
+[ADR-32-01](docs/architecture/adr/ADR-32-01-use-a-single-blocking-whole-module-coverage-gate.md).
 
 ### Architecture documentation
 
-Architecture Decision Records (ADRs) and Software Design Documents (SDDs) live
-under [`docs/architecture/`](docs/architecture/README.md). Use them for
-significant design, security, storage, content-proxy, embedded-editor, or
-compatibility changes.
+Architecture Decision Records (ADRs) and change documents live under
+[`docs/architecture/`](docs/architecture/README.md). Use them for significant
+design, security, storage, content-proxy, embedded-editor, or compatibility
+changes.
+
+Records are identified by the GitHub tracking number of the change that produced
+them — here always a pull-request number, since issues are tracked upstream in
+[`exelearning/exelearning`](https://github.com/exelearning/exelearning/issues).
+There is no committed index:
+
+```bash
+make architecture-records   # print the ADR and change indexes
+make architecture-check     # validate identifiers, metadata, cross-references
+```
 
 ## Requirements
 

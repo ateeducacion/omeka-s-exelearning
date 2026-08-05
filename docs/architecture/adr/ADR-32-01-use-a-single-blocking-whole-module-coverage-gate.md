@@ -1,14 +1,18 @@
 ---
-id: ADR-0002
+id: ADR-32-01
 title: "Verification contract: what a green CI run means"
 status: Accepted
 date: 2026-08-04
+tracking_issue: 32
+legacy_id: ADR-0002
+deciders:
+  - "@erseco"
+  - "claude-code"
 related:
-  issues: []
-  prs: []
-  sdds: []
+  prs: [32]
+  changes: []
   adrs:
-    - ADR-0001
+    - ADR-28-01
 supersedes: []
 superseded_by: []
 ai_assistance:
@@ -16,11 +20,7 @@ ai_assistance:
   model: "claude-opus-5"
 ---
 
-# ADR-0002: Verification contract: what a green CI run means
-
-## Status
-
-Accepted
+# ADR-32-01: Verification contract: what a green CI run means
 
 ## Context
 
@@ -171,7 +171,7 @@ The verification contract is:
 - `renderEditorStatusSection()`'s bundle-present branch stays uncovered: proving
   it needs a real `dist/static/` in the checkout, and fabricating one risks
   deleting a developer's build during teardown. It is covered by the `make
-  package` guards instead (ADR-0001).
+  package` guards instead (ADR-28-01).
 
 ## Validation
 
@@ -191,5 +191,5 @@ The verification contract is:
 - `Makefile`, `test/phpunit.xml`, `.github/workflows/ci.yml`, `codecov.yml`.
 - `.agents/skills/omeka-s-testing/SKILL.md` — the harness rules this ADR relies
   on.
-- ADR-0001 — why the editor bundle is absent in development checkouts.
-- `docs/architecture/adr/records.md` — ADR index.
+- ADR-28-01 — why the editor bundle is absent in development checkouts.
+- `make architecture-records` — prints the ADR index.

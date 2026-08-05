@@ -25,7 +25,7 @@ src/Media/FileRenderer/     ExeLearningRenderer (registered as `exelearning_rend
 src/Form/                   ConfigForm, StylesUploadForm
 view/                       .phtml partials, resolved via template_path_stack
 data/exelearning/           extracted ELPX content, one directory per SHA1
-dist/static/                the bundled editor -- a release artifact, see ADR-0001
+dist/static/                the bundled editor -- a release artifact, see ADR-28-01
 ```
 
 `Module.php` lives at the repository root, which is Omeka's convention and means
@@ -97,7 +97,7 @@ resolves against `window.location`.
 
 ```bash
 make lint            # PSR2 over src/, config/, Module.php
-make test-coverage   # full suite + the MIN_COVERAGE gate (ADR-0002)
+make test-coverage   # full suite + the MIN_COVERAGE gate (ADR-32-01)
 ```
 
 Both must pass before a change is done. `make fix` auto-corrects most PSR2
@@ -118,5 +118,5 @@ findings.
 ## Escalation
 
 Read the Omeka S developer documentation for module structure and events before
-inventing a pattern, and check `docs/architecture/adr/records.md` — a durable
-decision may already have been made.
+inventing a pattern, and run `make architecture-records` to list the ADRs — a
+durable decision may already have been made.
