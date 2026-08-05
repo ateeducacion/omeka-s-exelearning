@@ -119,6 +119,6 @@ Two adaptations are deliberate, and the local validator enforces them:
   this module's traceability points at `exelearning/exelearning`,
   `wp-exelearning` and `moodle-mod_exelearning`.
 
-The validator itself (`scripts/architecture_records.py`) is a PHP port of the
+The validator itself (`scripts/architecture-records.mts`) is a PHP port of the
 main repository's Bun/TypeScript checker. The rules are shared; the runtime is
 not, because this repository's CI installs only PHP.

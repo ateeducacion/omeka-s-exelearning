@@ -4,7 +4,9 @@
     "docs/architecture/adr/README.md",
     "docs/architecture/changes/README.md",
     "docs/architecture/adr/template.md",
-    "docs/architecture/changes/template.md",
-    "scripts/architecture_records_test.py"
-  ]
+    "docs/architecture/changes/template.md"
+  ],
+  "prefix": "ADR",
+  "records_dir": "docs/architecture/adr",
+  "changes_dir": "docs/architecture/changes"
 }
