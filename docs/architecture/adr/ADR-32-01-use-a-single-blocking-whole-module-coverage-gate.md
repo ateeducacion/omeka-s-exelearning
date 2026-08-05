@@ -5,6 +5,9 @@ status: Accepted
 date: 2026-08-04
 tracking_issue: 32
 legacy_id: ADR-0002
+deciders:
+  - "@erseco"
+  - "claude-code"
 related:
   prs: [32]
   changes: []
