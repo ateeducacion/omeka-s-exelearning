@@ -781,7 +781,8 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString('exeExternalMediaChild', $source);
         // Frontera de privilegio: la mitad de contenido no puede llevar la de confianza.
         $this->assertStringNotContainsString('exeExternalMediaHost', $source);
-        // ADR-0018: estos bytes se redistribuyen dentro del contenido, la concesión viaja.
+        // exelearning/exelearning ADR-2199-09: estos bytes se redistribuyen dentro del
+        // contenido, la concesión viaja.
         $this->assertStringContainsString('AGPL-3.0-or-later OR GPL-3.0-or-later', $source);
     }
 
@@ -789,8 +790,8 @@ class ContentControllerTest extends TestCase
      * La copia vendorizada es idéntica byte a byte a lo que publicó el core.
      *
      * Este módulo guarda los BYTES y los verifica, en vez de una copia de la lógica que
-     * pueda divergir (eXe ADR-0021). El CI corre la misma comprobación con un buildHash
-     * fijado fuera; este test es su mitad local y rápida.
+     * pueda divergir (exelearning/exelearning ADR-2199-12). El CI corre la misma
+     * comprobación con un buildHash fijado fuera; este test es su mitad local y rápida.
      */
     public function testVendoredArtifactMatchesItsManifest(): void
     {

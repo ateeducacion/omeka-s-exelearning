@@ -206,10 +206,10 @@ final class IframeSandbox
         // eXeLearning core, replacing the separate embed relay. It carries the media half
         // too, so the interactive-video iDevice works here without a second file.
         //
-        // eXeLearning core is canonical (eXe ADR-0021): this module holds the BYTES and
-        // verifies them against the shipped manifest rather than a copy of the logic that
-        // could drift. Do NOT patch it here -- a local edit is invisible upstream, is
-        // overwritten on the next re-vendor, and fails
+        // eXeLearning core is canonical (exelearning/exelearning ADR-2199-12): this module
+        // holds the BYTES and verifies them against the shipped manifest rather than a copy
+        // of the logic that could drift. Do NOT patch it here -- a local edit is invisible
+        // upstream, is overwritten on the next re-vendor, and fails
         // `node asset/js/exe_external_media/verify.mjs` in CI in the meantime.
         $view->headScript()->appendFile(
             $view->assetUrl('js/exe_external_media/exe-external-media-host.min.js', 'ExeLearning')

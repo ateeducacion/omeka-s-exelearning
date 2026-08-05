@@ -260,9 +260,9 @@ class ContentController extends AbstractActionController
         }
 
         // The CHILD half of the external-media bundle, vendored from eXeLearning core and
-        // verified against its manifest (eXe ADR-0021). Dormant until this page's host
-        // answers its handshake, so content served without one is left exactly as
-        // authored (eXe ADR-0017).
+        // verified against its manifest (exelearning/exelearning ADR-2199-12). Dormant
+        // until this page's host answers its handshake, so content served without one is
+        // left exactly as authored (exelearning/exelearning ADR-2199-08).
         $shimPath = dirname(__DIR__, 2) . '/asset/js/exe_external_media/exe-external-media-child.min.js';
         $shim = is_readable($shimPath) ? file_get_contents($shimPath) : false;
         if ($shim === false || $shim === '') {
