@@ -239,7 +239,7 @@ package:
 		echo "Error: VERSION not specified. Use 'make package VERSION=1.2.3'"; \
 		exit 1; \
 	fi
-	@# The embedded editor is a release artifact (ADR-0001): never produce a
+	@# The embedded editor is a release artifact (ADR-28-01): never produce a
 	@# package without a valid bundled editor.
 	@if [ ! -r dist/static/index.html ]; then \
 		echo "Error: dist/static/index.html is missing or unreadable. Build the editor with 'make build-editor' before packaging." >&2; \

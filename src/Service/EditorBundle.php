@@ -11,7 +11,7 @@ namespace ExeLearning\Service;
  * it pre-built under dist/static/, and that bundle is the only editor source
  * the module ever uses. There is no runtime install or update path; when the
  * bundle is missing (a source checkout without `make build-editor`) or
- * invalid, embedded editing is disabled. See ADR-0001.
+ * invalid, embedded editing is disabled. See ADR-28-01.
  */
 class EditorBundle
 {

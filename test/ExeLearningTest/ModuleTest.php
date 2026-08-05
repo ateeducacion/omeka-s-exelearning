@@ -29,7 +29,7 @@ use PHPUnit\Framework\TestCase;
  * handlers and the path/URL helpers.
  *
  * Module was outside the coverage gate until the stubs under test/Stubs/Omeka/
- * made it loadable without an Omeka runtime -- see ADR-0002. Collaborators are
+ * made it loadable without an Omeka runtime -- see ADR-32-01. Collaborators are
  * registered in a TestServiceLocator under the same service names production
  * uses, so a handler asking for something the test did not provide fails loudly
  * instead of taking a different branch.
@@ -953,7 +953,7 @@ class ModuleTest extends TestCase
      * The complementary branch (bundle present -> empty string) would need a
      * real dist/static/ in the checkout. Fabricating one risks deleting a
      * developer's actual build in tearDown, so it is left to the packaging
-     * checks in `make package` instead. See ADR-0001 and ADR-0002.
+     * checks in `make package` instead. See ADR-28-01 and ADR-32-01.
      */
     public function testRenderEditorStatusSectionWarnsWhenTheBundleIsMissing(): void
     {

@@ -78,13 +78,13 @@ Handlers render through `$view->partial()`, which the stub records in
 
 `make test-coverage` enforces `MIN_COVERAGE` (90) on **line** coverage and fails
 on any failing test. The measured set is `src/` plus the root `Module.php`,
-excluding `*Factory.php`. See ADR-0002 for why the gate is shaped this way.
+excluding `*Factory.php`. See ADR-32-01 for why the gate is shaped this way.
 
 Two traps:
 
 - **Do not pipe PHPUnit into another command in the Make target.** `/bin/sh` has
   no portable `pipefail`, so the recipe would report the pipe's exit status and
-  a failing suite would pass. This is exactly the bug ADR-0002 records.
+  a failing suite would pass. This is exactly the bug ADR-32-01 records.
 - **`pcov.directory` must be pinned to the repository root.** Left to
   auto-detect, pcov silently omits the root-level `Module.php`, so a pcov
   machine and an xdebug machine (what CI uses) gate on different numbers. The

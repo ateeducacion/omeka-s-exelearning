@@ -131,7 +131,7 @@ class Module extends AbstractModule
      * Drop the settings left behind by the removed runtime editor installer.
      *
      * The embedded editor became a release artifact bundled inside the module
-     * package (ADR-0001), so the runtime installer and its bookkeeping are
+     * package (ADR-28-01), so the runtime installer and its bookkeeping are
      * gone. Deleting the keys is idempotent and safe to run on every upgrade.
      *
      * @param ServiceLocatorInterface $serviceLocator
@@ -850,7 +850,7 @@ JS
     /**
      * Warn when the bundled editor is missing.
      *
-     * The editor ships inside the module package (ADR-0001), so in a normal
+     * The editor ships inside the module package (ADR-28-01), so in a normal
      * installation there is nothing to show or do here; the section only
      * appears when the bundle is absent (e.g. a development checkout that has
      * not run `make build-editor`).

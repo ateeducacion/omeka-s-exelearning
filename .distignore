@@ -6,7 +6,7 @@
 # nested test directory, wherever it turns up).
 #
 # The bundled editor under dist/static/ is a release artifact and must stay in
-# the package -- see ADR-0001. Do not add a `dist` rule here.
+# the package -- see ADR-28-01. Do not add a `dist` rule here.
 
 # VCS and CI
 .git
