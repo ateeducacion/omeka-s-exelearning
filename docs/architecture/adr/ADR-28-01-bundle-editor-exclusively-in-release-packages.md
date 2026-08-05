@@ -1,14 +1,17 @@
 ---
-id: ADR-0001
+id: ADR-28-01
 title: "Bundle the embedded editor exclusively in release packages"
 status: Accepted
 date: 2026-07-24
+tracking_issue: 28
+legacy_id: ADR-0001
 related:
   issues: []
   prs:
+    - https://github.com/exelearning/omeka-s-exelearning/pull/28
     - https://github.com/exelearning/moodle-mod_exelearning/pull/106
     - https://github.com/exelearning/wp-exelearning/pull/72
-  sdds: []
+  changes: []
   adrs: []
 supersedes: []
 superseded_by: []
@@ -17,11 +20,7 @@ ai_assistance:
   model: "claude-fable-5"
 ---
 
-# ADR-0001: Bundle the embedded editor exclusively in release packages
-
-## Status
-
-Accepted
+# ADR-28-01: Bundle the embedded editor exclusively in release packages
 
 ## Context
 
@@ -200,4 +199,4 @@ We will treat the embedded editor exclusively as a release artifact:
   plugin.
 - exelearning/wp-exelearning#72 — equivalent decision in the WordPress
   plugin.
-- `docs/architecture/adr/records.md` — ADR index.
+- `make architecture-records` — prints the ADR index.
