@@ -8,5 +8,7 @@
   ],
   "prefix": "ADR",
   "records_dir": "docs/architecture/adr",
-  "changes_dir": "docs/architecture/changes"
+  "changes_dir": "docs/architecture/changes",
+  "issues_url": "https://github.com/exelearning/omeka-s-exelearning/issues",
+  "repository_label": "`exelearning/omeka-s-exelearning`"
 }
