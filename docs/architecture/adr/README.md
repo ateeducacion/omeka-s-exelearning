@@ -300,7 +300,7 @@ make architecture-records   # print the current index
 `Architecture records` workflow — which, unlike the main CI job, is not filtered
 by `paths-ignore`, so a documentation-only pull request is still validated.
 
-The validator is `scripts/architecture-records.php`. It is a PHP port of the
+The validator is `scripts/architecture_records.py`. It is a PHP port of the
 main repository's Bun/TypeScript checker: the rules are shared, the runtime is
 not, because this repository's CI installs only PHP.
 

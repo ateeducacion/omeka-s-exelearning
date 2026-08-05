@@ -194,14 +194,14 @@ fix:
 # Deliberately not a committed file: a generated index conflicts on every
 # concurrent branch, and both hand-maintained ones had already drifted.
 architecture-records:
-	@php scripts/architecture-records.php list
+	@python3 scripts/architecture_records.py list
 
 # Validate architecture record identifiers, metadata and cross-references.
 # No Composer dependencies, so this works before `composer install` has run --
 # which is why the CI workflow that guards documentation-only pull requests can
 # skip the whole PHP dependency install.
 architecture-check:
-	@php scripts/architecture-records.php check
+	@python3 scripts/architecture_records.py check
 
 test:
 	@echo "Running unit tests..."

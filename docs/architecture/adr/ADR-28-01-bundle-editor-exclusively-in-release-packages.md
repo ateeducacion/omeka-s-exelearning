@@ -6,13 +6,12 @@ date: 2026-07-24
 tracking_issue: 28
 legacy_id: ADR-0001
 related:
-  issues: []
-  prs:
-    - https://github.com/exelearning/omeka-s-exelearning/pull/28
-    - https://github.com/exelearning/moodle-mod_exelearning/pull/106
-    - https://github.com/exelearning/wp-exelearning/pull/72
+  prs: [28]
   changes: []
   adrs: []
+external_refs:
+  - https://github.com/exelearning/moodle-mod_exelearning/pull/106
+  - https://github.com/exelearning/wp-exelearning/pull/72
 supersedes: []
 superseded_by: []
 ai_assistance:

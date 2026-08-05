@@ -1,0 +1,10 @@
+{
+  "legacy_allowlist": [
+    "docs/architecture/migration-map.md",
+    "docs/architecture/adr/README.md",
+    "docs/architecture/changes/README.md",
+    "docs/architecture/adr/template.md",
+    "docs/architecture/changes/template.md",
+    "scripts/architecture_records_test.py"
+  ]
+}
