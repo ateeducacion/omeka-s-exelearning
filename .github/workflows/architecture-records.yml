@@ -1,0 +1,50 @@
+---
+name: Architecture records
+
+# Deliberately unfiltered.
+#
+# ci.yml skips '**.md' and 'docs/**', so an ADR-only pull request would run no
+# job at all -- exactly the pull request this validator exists to police. And a
+# code-only pull request can break the records too, by leaving a retired
+# identifier in a comment, so filtering this workflow the other way would be
+# just as wrong. It runs on everything instead; it is a few seconds of PHP with
+# no dependency install.
+on:
+  pull_request:
+  push:
+    tags:
+      - '*'
+    branches:
+      - '*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  architecture_records:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      # No `composer install`: the validator has no dependencies, so the check
+      # stays fast and keeps working in a checkout without vendor/.
+      - name: Validate architecture records
+        run: make architecture-check
+
+      - name: Record index
+        if: always()
+        run: |
+          echo '## Architecture records' >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          make architecture-records >> $GITHUB_STEP_SUMMARY

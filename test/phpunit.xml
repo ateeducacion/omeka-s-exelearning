@@ -33,7 +33,7 @@
                 Module.php is a quarter of the codebase and holds every Omeka
                 event hook. It was outside the gate until the stubs under
                 test/Stubs/Omeka/Module/ made it loadable without an Omeka
-                runtime. See ADR-0002.
+                runtime. See ADR-32-01.
             -->
             <file>../Module.php</file>
         </include>

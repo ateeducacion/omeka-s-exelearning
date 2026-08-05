@@ -114,7 +114,7 @@ make test-coverage
 ```
 
 New handler branches need tests; `Module.php` is inside the coverage gate
-(ADR-0002). See `omeka-s-testing` for the event/double harness.
+(ADR-32-01). See `omeka-s-testing` for the event/double harness.
 
 ## Failure modes
 

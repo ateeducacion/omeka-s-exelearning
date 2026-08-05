@@ -1,12 +1,13 @@
 ---
-id: ADR-0000
+id: ADR-NNN-01
 title: "Short decision title"
 status: Proposed
 date: YYYY-MM-DD
+tracking_issue: NNN   # this repository's pull-request number
 related:
-  issues: []
+  issues: []          # upstream exelearning/exelearning issues, if any
   prs: []
-  sdds: []
+  changes: []
   adrs: []
 supersedes: []
 superseded_by: []
@@ -17,26 +18,34 @@ ai_assistance:
 
 <!--
 How to use this template:
-1. Copy this file to `ADR-NNNN-short-kebab-case-title.md` with the next free ID.
-2. Update the frontmatter above (id, title, date, related links).
-3. Fill every section below. Delete guidance comments before submitting.
-4. Keep the file at `status: Proposed` until reviewers accept it.
-5. Cite a verifiable source for each technical claim (repo path + commit,
-   Omeka S / Laminas documentation, benchmark, experiment, issue, PR, SDD, or
-   prior ADR).
-6. Record AI assistance in `ai_assistance` (values, or `none` if not used).
-7. Use issue/PR links for attribution — do not add people's names.
-See ../README.md for the full policy.
+
+1. Find the change's GitHub tracking NUMBER. In this repository that is always
+   the PULL REQUEST number: GitHub Issues are disabled here, and numbers from
+   the upstream exelearning/exelearning tracker come from a different sequence,
+   so they must never be used as an identifier. Link those under
+   `related.issues` instead. NEVER open an issue anywhere just to get a number.
+   The PR number only exists once the PR is open: open it first, then add the
+   ADR in a follow-up commit on the same branch.
+2. Copy this file to `ADR-<number>-<NN>-<decision-slug>.md`, where <NN> is the
+   next free two-digit sequence FOR THAT TRACKING NUMBER ONLY (`01` if it is the
+   first). The slug names the decision, not the topic.
+3. Set `id` to `ADR-<number>-<NN>` and `tracking_issue` to that number.
+   They must match the filename; CI enforces this.
+4. Make the H1 below `# <id>: <title>`.
+5. Fill every section. Delete these guidance comments before submitting.
+6. Keep the file at `status: Proposed` until reviewers accept it. Status lives
+   in the frontmatter only — do not add a `## Status` section.
+7. Cite a verifiable source for each technical claim (repo path + commit,
+   Omeka S / Laminas documentation, benchmark, experiment, issue, PR, change
+   document, or prior ADR).
+8. Record AI assistance in `ai_assistance` (values, or `none` if not used).
+9. Use issue/PR links for attribution — do not add people's names.
+10. Run `make architecture-check` to validate.
+
+See ./README.md for the full policy.
 -->
 
-# ADR-0000: Short decision title
-
-## Status
-
-Proposed
-
-<!-- One of: Proposed | Accepted | Rejected | Superseded. Keep it in sync with
-the frontmatter `status`. If superseded, link the replacement ADR. -->
+# ADR-NNN-01: Short decision title
 
 ## Context
 
@@ -74,7 +83,7 @@ compatibility, coding standards, implementation effort. -->
 - repository path + commit (e.g. `src/Controller/ContentController.php` @ `abc1234`)
 - official Omeka S / Laminas documentation or a specification (link)
 - a benchmark or reproducible experiment (numbers + how to reproduce)
-- a linked issue, PR, SDD, or prior ADR
+- a linked issue, PR, change document, or prior ADR
 No technical claim without a source. -->
 
 ## Decision
@@ -110,4 +119,5 @@ metrics, a follow-up review date, an experiment to run. -->
 
 ## References
 
-<!-- All sources cited above, plus related issues, PRs, SDDs and ADRs. -->
+<!-- All sources cited above, plus related issues, PRs, change documents and
+ADRs. -->

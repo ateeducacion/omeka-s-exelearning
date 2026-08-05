@@ -1,0 +1,12 @@
+{
+  "legacy_allowlist": [
+    "docs/architecture/migration-map.md",
+    "docs/architecture/adr/README.md",
+    "docs/architecture/changes/README.md",
+    "docs/architecture/adr/template.md",
+    "docs/architecture/changes/template.md"
+  ],
+  "prefix": "ADR",
+  "records_dir": "docs/architecture/adr",
+  "changes_dir": "docs/architecture/changes"
+}
