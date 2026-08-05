@@ -39,7 +39,9 @@ test/.phpunit.result.cache
 test/.phpunit.cache/
 artifacts/
 
-# Development tooling and configuration
+# Development tooling and configuration. scripts/ holds the architecture-record
+# validator: a documentation linter, not module code.
+scripts/
 phpmd.xml
 codecov.yml
 Makefile
@@ -50,7 +52,7 @@ composer.lock
 blueprint.json
 renovate.json
 
-# Repository documentation. docs/ holds the ADR/SDD records, not user docs.
+# Repository documentation. docs/ holds the architecture records, not user docs.
 docs/
 
 # Packaging output

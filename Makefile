@@ -22,7 +22,8 @@ endif
 
 .PHONY: help check-docker check-bun up upd down pull build lint fix shell clean seed \
         fetch-editor-source build-editor build-editor-no-update clean-editor \
-        package generate-pot update-po check-untranslated compile-mo i18n test test-coverage
+        package generate-pot update-po check-untranslated compile-mo i18n test test-coverage \
+        architecture-records architecture-check
 
 # ============================================================================
 # eXeLearning Editor Build
@@ -183,11 +184,24 @@ seed: check-docker
 # Code Quality
 # ============================================================================
 
-lint:
-	vendor/bin/phpcs src/ config/ Module.php --standard=PSR2 --colors -n
+lint: architecture-check
+	vendor/bin/phpcs src/ config/ scripts/ Module.php --standard=PSR2 --colors -n
 
 fix:
-	vendor/bin/phpcbf src/ config/ Module.php --standard=PSR2 --colors || true
+	vendor/bin/phpcbf src/ config/ scripts/ Module.php --standard=PSR2 --colors || true
+
+# Print the ADR and change indexes, derived from document frontmatter.
+# Deliberately not a committed file: a generated index conflicts on every
+# concurrent branch, and both hand-maintained ones had already drifted.
+architecture-records:
+	@php scripts/architecture-records.php list
+
+# Validate architecture record identifiers, metadata and cross-references.
+# No Composer dependencies, so this works before `composer install` has run --
+# which is why the CI workflow that guards documentation-only pull requests can
+# skip the whole PHP dependency install.
+architecture-check:
+	@php scripts/architecture-records.php check
 
 test:
 	@echo "Running unit tests..."
@@ -349,10 +363,12 @@ help:
 	@echo "  shell                  - Open a shell inside the omekas container"
 	@echo ""
 	@echo "Code quality:"
-	@echo "  lint                   - Run PHP linter (PHP_CodeSniffer)"
+	@echo "  lint                   - Run PHP linter (PHP_CodeSniffer) + architecture-check"
 	@echo "  fix                    - Automatically fix PHP code style issues"
 	@echo "  test                   - Run unit tests with PHPUnit"
 	@echo "  test-coverage          - Run tests with coverage report (requires xdebug/pcov)"
+	@echo "  architecture-records   - Print the ADR and change indexes"
+	@echo "  architecture-check     - Validate architecture record identifiers/metadata"
 	@echo ""
 	@echo "Packaging:"
 	@echo "  package VERSION=x.y.z  - Generate a .zip package of the module"
