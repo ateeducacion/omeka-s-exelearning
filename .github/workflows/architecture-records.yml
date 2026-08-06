@@ -39,6 +39,21 @@ jobs:
 
       # No `composer install`: the validator has no dependencies, so the check
       # stays fast and keeps working in a checkout without vendor/.
+      - name: Architecture validator matches core
+        run: |
+          # The validator is a verbatim copy of the canonical file in
+          # exelearning/exelearning. Fix it there and re-copy — never edit it
+          # here, or the copies drift apart silently.
+          curl -fsSL --retry 3 \
+            https://raw.githubusercontent.com/exelearning/exelearning/main/scripts/architecture-records.mts \
+            -o /tmp/architecture-records.core.mts
+          if ! diff -u /tmp/architecture-records.core.mts scripts/architecture-records.mts; then
+            echo "::error file=scripts/architecture-records.mts::drifted from exelearning/exelearning@main."
+            echo "Re-copy it from core; do not patch it here."
+            exit 1
+          fi
+          echo "In sync with core ($(shasum -a 256 scripts/architecture-records.mts | cut -c1-16)…)."
+
       - name: Validate architecture records
         run: make architecture-check
 
