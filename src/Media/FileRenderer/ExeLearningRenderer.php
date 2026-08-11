@@ -8,6 +8,7 @@ use Omeka\Media\FileRenderer\RendererInterface;
 use Laminas\View\Renderer\PhpRenderer;
 use ExeLearning\Service\ElpFileService;
 use ExeLearning\Service\DownloadFormats;
+use ExeLearning\Service\IframeSandbox;
 
 /**
  * Renderer for eXeLearning files.
@@ -75,6 +76,15 @@ class ExeLearningRenderer implements RendererInterface
             $view->assetUrl('js/exelearning-viewer.js', 'ExeLearning')
         );
 
+        // In secure mode the content is opaque, so external embeds are promoted to this
+        // page (no-op in legacy, where they already work inline). The embed policy
+        // (open default | strict) mirrors mod_exelearning's embedmode setting (DEC-0061).
+        IframeSandbox::enqueueEmbedRelay($view, $config['iframe_mode'], $config['embed_mode']);
+
+        // Parent-side media host for the interactive-video iDevice in secure mode (DEC-0067):
+        // completes the window.exeMediaBridge handshake and plays the provider video in a
+        // modal via raw postMessage (no third-party SDK on this page). No-op in legacy.
+
         // Enqueue the download orchestrator only when the multi-format
         // button will actually be rendered.
         $downloadFormatIds = $this->getEnabledDownloadFormats($view);
@@ -121,7 +131,7 @@ class ExeLearningRenderer implements RendererInterface
         $html .= 'data-exe-content-path="' . $view->escapeHtmlAttr($contentPath) . '" ';
         $html .= 'class="exelearning-iframe" ';
         $html .= 'style="width: 100%; height: ' . (int) $config['height'] . 'px; border: none;" ';
-        $html .= 'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" ';
+        $html .= 'sandbox="' . IframeSandbox::tokens($config['iframe_mode']) . '" ';
         $html .= 'referrerpolicy="no-referrer" ';
         $html .= 'allowfullscreen>';
         $html .= '</iframe>';
@@ -260,14 +270,21 @@ class ExeLearningRenderer implements RendererInterface
     {
         $defaults = [
             'height' => 600,
+            'iframe_mode' => IframeSandbox::MODE_SECURE,
+            'embed_mode' => IframeSandbox::EMBED_STRICT,
         ];
 
         try {
             $setting = $view->getHelperPluginManager()->get('setting');
             return [
                 'height' => $setting('exelearning_viewer_height', $defaults['height']),
+                'iframe_mode' => IframeSandbox::normalizeMode(
+                    $setting('exelearning_iframe_mode', $defaults['iframe_mode'])
+                ),
+                // Raw setting value; IframeSandbox::embedMode() resolves it (strict default).
+                'embed_mode' => $setting(IframeSandbox::EMBED_OPTION, IframeSandbox::EMBED_STRICT),
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $defaults;
         }
     }

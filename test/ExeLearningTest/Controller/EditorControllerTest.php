@@ -445,6 +445,9 @@ class EditorControllerTest extends TestCase
                     public function getScheme(): string { return 'https'; }
                     public function getHost(): string { return 'example.com'; }
                     public function getPort(): ?int { return null; }
+                    // resolveBasePath() derives the install sub-path from the URI
+                    // before falling back to getBasePath().
+                    public function getPath(): string { return '/omeka-s/admin/exelearning/edit/123'; }
                 };
             }
             public function getBasePath(): string { return '/omeka-s'; }
@@ -487,6 +490,9 @@ class EditorControllerTest extends TestCase
                     public function getScheme(): string { return 'https'; }
                     public function getHost(): string { return 'example.com'; }
                     public function getPort(): ?int { return 443; }
+                    // Root install: no sub-path to derive, so resolveBasePath()
+                    // falls through to the empty getBasePath() below.
+                    public function getPath(): string { return '/admin/exelearning/edit/123'; }
                 };
             }
             public function getBasePath(): string { return ''; }
@@ -527,6 +533,9 @@ class EditorControllerTest extends TestCase
                     public function getScheme(): string { return 'http'; }
                     public function getHost(): string { return 'localhost'; }
                     public function getPort(): ?int { return 8080; }
+                    // resolveBasePath() derives the install sub-path from the URI
+                    // before falling back to getBasePath().
+                    public function getPath(): string { return '/omeka-s/admin/exelearning/edit/123'; }
                 };
             }
             public function getBasePath(): string { return '/omeka-s'; }
@@ -571,6 +580,9 @@ class EditorControllerTest extends TestCase
                     public function getScheme(): string { return 'https'; }
                     public function getHost(): string { return 'example.com'; }
                     public function getPort(): ?int { return null; }
+                    // resolveBasePath() derives the install sub-path from the URI
+                    // before falling back to getBasePath().
+                    public function getPath(): string { return '/omeka-s/admin/exelearning/edit/123'; }
                 };
             }
             public function getBasePath(): string { return ''; }
@@ -718,5 +730,59 @@ class EditorControllerTest extends TestCase
             }
         };
         $this->assertSame('', $this->callProtectedMethod($this->controller, 'resolveBasePath', [$request]));
+    }
+
+    // =========================================================================
+    // buildPreviewSnapshotConfig() — opaque preview transport
+    // =========================================================================
+
+    public function testBuildPreviewSnapshotConfigDerivesEveryUrlFromOrigin(): void
+    {
+        $config = $this->callProtectedMethod(
+            $this->controller,
+            'buildPreviewSnapshotConfig',
+            ['https://example.com/omeka-s', 'tok3n-abc123']
+        );
+
+        $this->assertSame(
+            'https://example.com/omeka-s/api/exelearning/preview-session',
+            $config['managementUrl']
+        );
+        $this->assertSame(
+            'https://example.com/omeka-s/exelearning/preview',
+            $config['servingBaseUrl']
+        );
+        // The editor substitutes {previewId}; the key must survive verbatim.
+        $this->assertSame(
+            'https://example.com/omeka-s/api/exelearning/preview-session/{previewId}',
+            $config['deleteUrlTemplate']
+        );
+        $this->assertSame(['X-CSRF-Token' => 'tok3n-abc123'], $config['managementHeaders']);
+        // The editor reads previewSnapshot; a stale protocol key would leave the
+        // opaque preview silently unreachable rather than broken.
+        $this->assertArrayNotHasKey('protocolVersion', $config);
+    }
+
+    public function testBuildPreviewSnapshotConfigWorksAtRootInstall(): void
+    {
+        // Root install: origin is serverUrl with an empty basePath.
+        $config = $this->callProtectedMethod(
+            $this->controller,
+            'buildPreviewSnapshotConfig',
+            ['https://example.com', 'zzz']
+        );
+
+        $this->assertSame(
+            'https://example.com/api/exelearning/preview-session',
+            $config['managementUrl']
+        );
+        $this->assertSame('https://example.com/exelearning/preview', $config['servingBaseUrl']);
+    }
+
+    public function testPreviewCsrfUsesDedicatedNamespace(): void
+    {
+        // The preview token must NOT share the default form-token namespace, so
+        // the form token's 5-minute container-global expiry cannot wipe it.
+        $this->assertSame('exelearning_preview', \ExeLearning\Controller\PreviewCsrf::NAME);
     }
 }

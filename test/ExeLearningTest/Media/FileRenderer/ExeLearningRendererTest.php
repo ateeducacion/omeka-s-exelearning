@@ -141,6 +141,50 @@ class ExeLearningRendererTest extends TestCase
         $this->assertIsArray($config);
         $this->assertEquals(600, $config['height']);
         $this->assertArrayNotHasKey('showEditButton', $config);
+        // Fail-safe: with no settings available the iframe stays secure.
+        $this->assertSame('secure', $config['iframe_mode']);
+    }
+
+    public function testGetConfigIgnoresLegacyIframeMode(): void
+    {
+        $mockSetting = new class {
+            public function __invoke($key, $default = null)
+            {
+                $settings = ['exelearning_iframe_mode' => 'legacy'];
+                return $settings[$key] ?? $default;
+            }
+        };
+        $mockPluginManager = new class ($mockSetting) {
+            private $setting;
+            public function __construct($setting)
+            {
+                $this->setting = $setting;
+            }
+            public function get($name)
+            {
+                if ($name === 'setting') {
+                    return $this->setting;
+                }
+                throw new \Exception("Unknown helper: $name");
+            }
+        };
+        $view = new class ($mockPluginManager) extends \Laminas\View\Renderer\PhpRenderer {
+            private $pm;
+            public function __construct($pm)
+            {
+                $this->pm = $pm;
+            }
+            public function getHelperPluginManager()
+            {
+                return $this->pm;
+            }
+        };
+
+        $config = $this->callProtectedMethod($this->renderer, 'getConfig', [$view]);
+
+        // The same-origin mode was removed: a leftover 'legacy' setting is ignored and the
+        // renderer still resolves to secure (no silent downgrade).
+        $this->assertSame('secure', $config['iframe_mode']);
     }
 
     // =========================================================================
@@ -331,8 +375,11 @@ class ExeLearningRendererTest extends TestCase
 
         $result = $renderer->render($view, $media);
 
-        // Check that security sandbox attributes are present
-        $this->assertStringContainsString('sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"', $result);
+        // Secure default: opaque-origin tokens (scripts + popups + forms), with no
+        // same-origin and no popup escape. allow-forms lets the iDevice forms submit.
+        $this->assertStringContainsString('sandbox="allow-scripts allow-popups allow-forms"', $result);
+        $this->assertStringNotContainsString('allow-same-origin', $result);
+        $this->assertStringNotContainsString('allow-popups-to-escape-sandbox', $result);
         $this->assertStringContainsString('referrerpolicy="no-referrer"', $result);
     }
 

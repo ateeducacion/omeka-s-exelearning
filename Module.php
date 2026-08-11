@@ -14,6 +14,7 @@ use Omeka\Stdlib\Message;
 use ExeLearning\Form\ConfigForm;
 use ExeLearning\Service\DownloadFormats;
 use ExeLearning\Service\EditorBundle;
+use ExeLearning\Service\IframeSandbox;
 
 /**
  * Main class for the ExeLearning module.
@@ -811,6 +812,12 @@ JS
         $form->setData([
             'exelearning_viewer_height' => $settings->get('exelearning_viewer_height', 600),
             'exelearning_download_formats' => DownloadFormats::sanitize($storedFormats),
+            'exelearning_iframe_mode' => IframeSandbox::normalizeMode(
+                $settings->get('exelearning_iframe_mode', 'secure')
+            ),
+            'exelearning_embed_mode' => IframeSandbox::embedMode(
+                $settings->get(IframeSandbox::EMBED_OPTION, IframeSandbox::EMBED_OPEN)
+            ),
         ]);
 
         $formHtml = $renderer->formCollection($form, false);
@@ -902,6 +909,14 @@ JS
         $settings->set(
             'exelearning_download_formats',
             DownloadFormats::sanitize($config['exelearning_download_formats'] ?? [])
+        );
+        $settings->set(
+            'exelearning_iframe_mode',
+            IframeSandbox::normalizeMode($config['exelearning_iframe_mode'] ?? 'secure')
+        );
+        $settings->set(
+            IframeSandbox::EMBED_OPTION,
+            IframeSandbox::embedMode($config[IframeSandbox::EMBED_OPTION] ?? IframeSandbox::EMBED_OPEN)
         );
     }
 }

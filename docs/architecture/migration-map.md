@@ -78,6 +78,27 @@ None. `docs/architecture/sdd/` only ever contained scaffolding — a README, a
 template and an empty index. No `SDD-NNNN` document was written, so no design
 record needed migrating.
 
+## Cross-repository identifiers cited from this repository
+
+`exelearning/exelearning` migrated to the same tracking-number grammar, so the
+upstream identifiers this module's code and CI comments cite were renumbered too.
+The check is repository-agnostic — it fails on the retired *shape* wherever it
+appears — so these had to be rewritten here as well. They are **not** records of
+this repository: nothing under `docs/architecture/adr/` corresponds to them.
+
+| Old identifier | Current identifier | Decision | Upstream tracking |
+|---|---|---|---|
+| `ADR-0017` | `ADR-2199-08` | The in-content embed shim stays inert until a host completes the handshake | [`exelearning/exelearning#2199`](https://github.com/exelearning/exelearning/pull/2199) |
+| `ADR-0018` | `ADR-2199-09` | Dual-license the shared embedder family so one file ships under AGPL and GPL | [`exelearning/exelearning#2199`](https://github.com/exelearning/exelearning/pull/2199) |
+| `ADR-0021` | `ADR-2199-12` | eXeLearning core is canonical for the external-media family, verified by manifest | [`exelearning/exelearning#2199`](https://github.com/exelearning/exelearning/pull/2199) |
+
+Each row's mapping is the record's own `legacy_id` field upstream. All three
+still live on the unmerged branch `feature/preview-trust-boundary`, so their
+permanent `main` URLs do not resolve yet — cite them by identifier and name the
+repository, as `src/Service/IframeSandbox.php` and `.github/workflows/ci.yml` now
+do. A bare `ADR-NNNN` in a comment was ambiguous about which repository owned the
+decision; `exelearning/exelearning ADR-2199-12` is not.
+
 ## Directories, templates and indexes
 
 | Old path | Current path | Notes |
@@ -96,10 +117,16 @@ The `docs/architecture/sdd/` directory no longer exists.
 ## Identifiers reserved on open branches
 
 None. At migration time the only open pull request was
-[#21](https://github.com/exelearning/omeka-s-exelearning/pull/21), which touches
-no file under `docs/architecture/`, and neither remote feature branch adds a
-record. Both retired identifiers therefore resolve unambiguously, and no
-reconciliation with in-flight work is needed.
+[#21](https://github.com/exelearning/omeka-s-exelearning/pull/21), and neither
+remote feature branch adds a record. Both retired identifiers therefore resolve
+unambiguously, and no reconciliation with in-flight work was needed.
+
+After the migration reached `main`, #21 merged it and found that the check also
+fires on the *upstream* identifiers its code comments cite — a case the migration
+had not accounted for, since those decisions are recorded in another repository.
+It still adds no record here; it only rewrote those citations and filled in the
+[cross-repository table](#cross-repository-identifiers-cited-from-this-repository)
+above.
 
 ## Enforcement
 

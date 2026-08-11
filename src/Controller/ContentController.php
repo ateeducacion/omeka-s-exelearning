@@ -19,6 +19,9 @@ class ContentController extends AbstractActionController
     /** @var string */
     protected $basePath;
 
+    /** @var string Iframe-security mode (secure|legacy); drives the response sandbox CSP. */
+    protected $iframeMode = \ExeLearning\Service\IframeSandbox::MODE_SECURE;
+
     /** @var array MIME types for common file extensions */
     protected $mimeTypes = [
         'html' => 'text/html',
@@ -49,11 +52,13 @@ class ContentController extends AbstractActionController
     ];
 
     /**
-     * @param string $basePath Path to the exelearning files directory
+     * @param string $basePath   Path to the exelearning files directory
+     * @param string $iframeMode Iframe-security mode (secure|legacy)
      */
-    public function __construct(string $basePath)
+    public function __construct(string $basePath, string $iframeMode = \ExeLearning\Service\IframeSandbox::MODE_SECURE)
     {
         $this->basePath = $basePath;
+        $this->iframeMode = \ExeLearning\Service\IframeSandbox::normalizeMode($iframeMode);
     }
 
     /**
@@ -124,6 +129,11 @@ class ContentController extends AbstractActionController
             return $this->notFound('File not found');
         }
 
+        // Promote whitelisted external embeds to the parent (secure mode only).
+        if (strpos($mimeType, 'text/html') !== false) {
+            $content = $this->injectEmbedShim($content);
+        }
+
         $headers->addHeaderLine('Content-Length', (string) strlen($content));
         $response->setContent($content);
 
@@ -144,30 +154,59 @@ class ContentController extends AbstractActionController
         // Prevent MIME type sniffing
         $headers->addHeaderLine('X-Content-Type-Options', 'nosniff');
 
+        // In secure mode, send Referrer-Policy: no-referrer on EVERY served file (incl.
+        // PDFs, CSS, images) so the opaque content never leaks the referrer to an external
+        // host on any subresource it loads, not just the HTML document.
+        if (\ExeLearning\Service\IframeSandbox::MODE_SECURE === $this->iframeMode) {
+            $headers->addHeaderLine('Referrer-Policy', 'no-referrer');
+        }
+
         // For HTML content, add strict Content-Security-Policy
         if (strpos($mimeType, 'text/html') !== false) {
-            // CSP that:
-            // - Allows inline styles and scripts (needed for eXeLearning content)
-            // - Restricts where content can be loaded from
-            // - Prevents the content from framing other sites
-            // - Allows images/media from same origin and data URIs
-            $csp = implode('; ', [
+            // CSP that allows the inline/eval scripts eXeLearning needs while restricting
+            // where the opaque content can load from. The strict (default) profile blocks
+            // bare https: in script/img/media-src so the served URL cannot be exfiltrated;
+            // the compatible profile re-opens them for external author assets (weaker).
+            $compatible = \ExeLearning\Service\IframeSandbox::CSP_COMPATIBLE
+                === \ExeLearning\Service\IframeSandbox::cspProfile();
+            if ($compatible) {
+                $scriptSrc = "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:";
+                $imgSrc = "img-src 'self' data: blob: https:";
+                $mediaSrc = "media-src 'self' data: blob: https:";
+                $frameSrc = "frame-src 'self' https:";
+            } else {
+                $providers = 'https://www.youtube-nocookie.com https://player.vimeo.com '
+                    . 'https://www.dailymotion.com https://mediateca.educa.madrid.org';
+                $scriptSrc = "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+                $imgSrc = "img-src 'self' data: blob:";
+                $mediaSrc = "media-src 'self' data: blob:";
+                $frameSrc = "frame-src 'self' " . $providers;
+            }
+            $directives = [
                 "default-src 'self'",
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+                $scriptSrc,
                 "style-src 'self' 'unsafe-inline'",
-                "img-src 'self' data: blob:",
-                "media-src 'self' data: blob:",
+                $imgSrc,
+                $mediaSrc,
                 "font-src 'self' data:",
                 "connect-src 'self'",
-                "frame-src 'self'",
+                $frameSrc,
                 "frame-ancestors 'self'",
                 "form-action 'none'",
                 "base-uri 'self'",
-            ]);
-            $headers->addHeaderLine('Content-Security-Policy', $csp);
-
-            // Referrer policy - don't leak info to external sites
-            $headers->addHeaderLine('Referrer-Policy', 'same-origin');
+            ];
+            // In secure mode, sandbox the document at the response level so it keeps an
+            // opaque origin even when loaded OUTSIDE the embedding iframe (opened in a new
+            // tab, via an escaped popup, or by navigating to the raw content URL). Without
+            // this, that top-level document would run author JS as the Omeka origin. The
+            // tokens mirror the secure iframe sandbox (IframeSandbox SECURE_TOKENS): scripts +
+            // popups + forms, no same-origin. allow-forms lets the form-based iDevices submit
+            // inside the opaque sandbox; a CSP sandbox without it would block submission even
+            // though the iframe attribute permits it (the effective sandbox is the intersection).
+            if (\ExeLearning\Service\IframeSandbox::MODE_SECURE === $this->iframeMode) {
+                $directives[] = 'sandbox allow-scripts allow-popups allow-forms';
+            }
+            $headers->addHeaderLine('Content-Security-Policy', implode('; ', $directives));
 
             // Permissions policy - disable dangerous features
             $headers->addHeaderLine(
@@ -188,7 +227,6 @@ class ContentController extends AbstractActionController
                 "frame-ancestors 'self'",
                 'sandbox',
             ]));
-            $headers->addHeaderLine('Referrer-Policy', 'same-origin');
         }
     }
 
@@ -204,6 +242,40 @@ class ContentController extends AbstractActionController
     {
         return strpos($mimeType, 'svg') !== false
             || strpos($mimeType, 'xml') !== false;
+    }
+
+    /**
+     * Inject the external-embed shim into the served document (secure mode only).
+     *
+     * In secure mode the content runs opaque, so cross-origin players (YouTube,
+     * Vimeo, …) and PDFs render blank. The shim replaces each whitelisted/PDF iframe
+     * with a placeholder and reports its geometry to the parent, which overlays the
+     * real player inline (see asset/js/exe_external_media/, both halves in one bundle).
+     * No-op in legacy mode.
+     */
+    protected function injectEmbedShim(string $html): string
+    {
+        if (\ExeLearning\Service\IframeSandbox::MODE_SECURE !== $this->iframeMode) {
+            return $html;
+        }
+
+        // The CHILD half of the external-media bundle, vendored from eXeLearning core and
+        // verified against its manifest (exelearning/exelearning ADR-2199-12). Dormant
+        // until this page's host answers its handshake, so content served without one is
+        // left exactly as authored (exelearning/exelearning ADR-2199-08).
+        $shimPath = dirname(__DIR__, 2) . '/asset/js/exe_external_media/exe-external-media-child.min.js';
+        $shim = is_readable($shimPath) ? file_get_contents($shimPath) : false;
+        if ($shim === false || $shim === '') {
+            return $html;
+        }
+
+        $script = '<script id="exelearning-embed-shim">' . $shim . '</script>';
+
+        if (stripos($html, '</body>') !== false) {
+            return preg_replace('/<\/body>/i', $script . '</body>', $html, 1) ?? $html;
+        }
+
+        return $html . $script;
     }
 
     /**

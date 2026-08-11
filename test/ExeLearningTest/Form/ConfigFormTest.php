@@ -95,6 +95,17 @@ class ConfigFormTest extends TestCase
     }
 
     // =========================================================================
+    // Iframe security mode element tests
+    // =========================================================================
+
+    public function testFormHasNoIframeModeElement(): void
+    {
+        // The secure/legacy mode selector was removed: the preview is always opaque-origin,
+        // so the form no longer exposes a way to weaken isolation.
+        $this->assertFalse($this->form->has('exelearning_iframe_mode'));
+    }
+
+    // =========================================================================
     // Additional tests
     // =========================================================================
 

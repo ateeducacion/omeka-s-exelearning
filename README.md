@@ -41,13 +41,25 @@ location ^~ /files/exelearning/ {
     return 403;
 }
 
+# Block direct access to the ephemeral editor-preview session store.
+# REQUIRED on nginx (and any non-Apache server): these bytes are only meant to
+# be served through the opaque-origin preview capability URL with a sandbox CSP;
+# a direct hit would leak untrusted author HTML same-origin without that CSP.
+location ^~ /files/exelearning-preview/ {
+    return 403;
+}
+
 # Route content proxy to PHP
 location ^~ /exelearning/content/ {
     try_files $uri /index.php$is_args$args;
 }
 ```
 
-Apache is supported automatically via the included `.htaccess` file.
+Apache is supported automatically via the included `.htaccess` deny guards
+(one for the extracted-content store, one written into the preview session
+store). **Non-Apache deployments MUST deny direct web access to both
+`{file_store}/exelearning` and `{file_store}/exelearning-preview`** — nginx and
+other servers do not read `.htaccess`.
 
 ### From Source (Development)
 
@@ -78,6 +90,22 @@ EXELEARNING_EDITOR_REF=vX.Y.Z EXELEARNING_EDITOR_REF_TYPE=tag make build-editor
 1. Go to the media page (**Admin > Items > [Your Item] > [Media]**)
 2. Click **Edit in eXeLearning**
 3. Make your changes and click **Save to Omeka**
+
+## External embeds in secure mode
+
+In secure mode the `.elpx` content is served inside an opaque-origin sandboxed iframe. That isolation is what keeps untrusted package content from reading or scripting the host page, but it also blanks third-party players (YouTube/Vimeo) and inline PDFs, which refuse to run in an opaque origin.
+
+To restore them, the module promotes those embeds to the parent page and renders them inline:
+
+- **In-iframe shim** (`asset/js/exe-embed-shim.js`): inside the sandbox it finds whitelisted video iframes, any `https` `.pdf` iframe, and local package PDFs, replaces each with a placeholder, and `postMessage`s the embed URL plus geometry to the parent.
+- **Parent relay** (`asset/js/exe-embed-relay.js`): validates each URL against the host whitelist (YouTube/Vimeo hosts, plus PDFs), rebuilds the canonical player URL, and overlays the real player on top of the placeholder so it lines up with the content.
+
+A cross-browser (Firefox) Playwright e2e exercises this against a static harness with the real shim/relay (no Omeka runtime needed):
+
+```bash
+npm install            # once, to fetch @playwright/test
+npm run test:e2e:embed # serves the harness and runs the Firefox spec
+```
 
 ## Development
 

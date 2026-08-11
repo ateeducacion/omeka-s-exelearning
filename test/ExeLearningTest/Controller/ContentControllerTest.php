@@ -294,6 +294,8 @@ class ContentControllerTest extends TestCase
 
         $this->assertNotNull($headers->get('Content-Security-Policy'));
         $this->assertNotNull($headers->get('Referrer-Policy'));
+        // Secure mode (the default) sends no-referrer on the HTML document too.
+        $this->assertEquals('no-referrer', $headers->get('Referrer-Policy')->getFieldValue());
         $this->assertNotNull($headers->get('Permissions-Policy'));
     }
 
@@ -307,6 +309,11 @@ class ContentControllerTest extends TestCase
 
         // CSP should NOT be added for non-HTML content
         $this->assertNull($headers->get('Content-Security-Policy'));
+
+        // …but in secure mode (the default) even a non-HTML file now carries
+        // Referrer-Policy: no-referrer (PDFs/CSS no longer leak the referrer).
+        $this->assertNotNull($headers->get('Referrer-Policy'));
+        $this->assertEquals('no-referrer', $headers->get('Referrer-Policy')->getFieldValue());
     }
 
     public function testAddSecurityHeadersForCss(): void
@@ -340,6 +347,87 @@ class ContentControllerTest extends TestCase
         $this->assertStringContainsString("img-src 'self' data: blob:", $csp);
         $this->assertStringContainsString("frame-ancestors 'self'", $csp);
         $this->assertStringContainsString("form-action 'none'", $csp);
+        // Strict (default): no bare https: channels (so the served URL cannot be exfiltrated);
+        // frame-src is limited to the maintained providers.
+        $this->assertDoesNotMatchRegularExpression('~\bhttps:(?!//)~', $csp);
+        $this->assertStringContainsString('https://www.youtube-nocookie.com', $csp);
+    }
+
+    public function testSecureModeCspSandboxesTheDocument(): void
+    {
+        // Default controller is secure mode.
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'text/html']);
+
+        $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+        // The response-level sandbox keeps the document opaque even if opened outside
+        // the iframe (new tab / escaped popup / raw URL navigation). It mirrors the
+        // secure iframe tokens incl. allow-forms so iDevice forms submit.
+        $this->assertStringContainsString('sandbox allow-scripts allow-popups allow-forms', $csp);
+    }
+
+    public function testLegacyModeArgIsIgnoredStillSandboxed(): void
+    {
+        // The same-origin mode was removed: a 'legacy' constructor arg is ignored and the
+        // response-level CSP sandbox is still applied (no silent downgrade to same-origin).
+        $controller = new ContentController($this->testBasePath, 'legacy');
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($controller, 'addSecurityHeaders', [$headers, 'text/html']);
+
+        $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+        $this->assertStringContainsString('sandbox allow-scripts allow-popups allow-forms', $csp);
+        $this->assertStringContainsString("default-src 'self'", $csp);
+    }
+
+    public function testInjectEmbedShimAddsShimInSecureMode(): void
+    {
+        $html = '<html><head></head><body><p>content</p></body></html>';
+        $out = $this->callProtectedMethod($this->controller, 'injectEmbedShim', [$html]);
+
+        $this->assertStringContainsString('id="exelearning-embed-shim"', $out);
+        // The shim source itself is inlined.
+        $this->assertStringContainsString('data-exe-embed-id', $out);
+        // Injected before the closing body tag.
+        $this->assertStringContainsString('</script></body>', $out);
+    }
+
+    public function testInjectEmbedShimIgnoresLegacyArg(): void
+    {
+        // The same-origin mode was removed: a 'legacy' constructor arg is ignored and the
+        // embed shim is still injected (the content always renders secure).
+        $controller = new ContentController($this->testBasePath, 'legacy');
+        $html = '<html><head></head><body><p>content</p></body></html>';
+        $out = $this->callProtectedMethod($controller, 'injectEmbedShim', [$html]);
+
+        $this->assertStringContainsString('exelearning-embed-shim', $out);
+    }
+
+    public function testCspIsStrictByDefault(): void
+    {
+        $headers = new \Laminas\Http\Headers();
+        $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'text/html']);
+
+        $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+        // Strict (default): no bare https: in img/media, frame-src limited to the maintained
+        // providers, connect-src closed — so the opaque content cannot exfiltrate the served URL.
+        $this->assertStringContainsString("img-src 'self' data: blob:", $csp);
+        $this->assertDoesNotMatchRegularExpression('~img-src[^;]*\bhttps:(?!//)~', $csp);
+        $this->assertStringContainsString("frame-src 'self' https://www.youtube-nocookie.com", $csp);
+        $this->assertStringContainsString("connect-src 'self'", $csp);
+    }
+
+    public function testCspCompatibleProfileAllowsExternalHttps(): void
+    {
+        putenv('EXELEARNING_CSP_PROFILE=compatible');
+        try {
+            $headers = new \Laminas\Http\Headers();
+            $this->callProtectedMethod($this->controller, 'addSecurityHeaders', [$headers, 'text/html']);
+            $csp = $headers->get('Content-Security-Policy')->getFieldValue();
+            $this->assertMatchesRegularExpression('~img-src[^;]*\bhttps:(?!//)~', $csp);
+            $this->assertMatchesRegularExpression('~media-src[^;]*\bhttps:(?!//)~', $csp);
+        } finally {
+            putenv('EXELEARNING_CSP_PROFILE');
+        }
     }
 
     // =========================================================================
@@ -674,5 +762,70 @@ class ContentControllerTest extends TestCase
 
         $this->assertEquals(200, $response->getStatusCode());
         $this->assertNull($response->getHeaders()->get('Content-Security-Policy'));
+    }
+
+    /**
+     * El runtime inyectado en el contenido servido es el bundle CHILD canónico
+     * vendorizado desde el core de eXeLearning, no el shim al que sustituye.
+     *
+     * Se afirma sobre los BYTES y no sobre la ruta: la ruta es lo que cambia un refactor,
+     * los bytes son lo que ejecuta un alumno.
+     */
+    public function testInjectedChildRuntimeIsTheCanonicalBundle(): void
+    {
+        $path = dirname(__DIR__, 3) . '/asset/js/exe_external_media/exe-external-media-child.min.js';
+        $this->assertFileExists($path, 'el bundle child no está vendorizado');
+
+        $source = (string) file_get_contents($path);
+        // Un símbolo que solo define el bundle canónico.
+        $this->assertStringContainsString('exeExternalMediaChild', $source);
+        // Frontera de privilegio: la mitad de contenido no puede llevar la de confianza.
+        $this->assertStringNotContainsString('exeExternalMediaHost', $source);
+        // exelearning/exelearning ADR-2199-09: estos bytes se redistribuyen dentro del
+        // contenido, la concesión viaja.
+        $this->assertStringContainsString('AGPL-3.0-or-later OR GPL-3.0-or-later', $source);
+    }
+
+    /**
+     * La copia vendorizada es idéntica byte a byte a lo que publicó el core.
+     *
+     * Este módulo guarda los BYTES y los verifica, en vez de una copia de la lógica que
+     * pueda divergir (exelearning/exelearning ADR-2199-12). El CI corre la misma
+     * comprobación con un buildHash fijado fuera; este test es su mitad local y rápida.
+     */
+    public function testVendoredArtifactMatchesItsManifest(): void
+    {
+        $dir = dirname(__DIR__, 3) . '/asset/js/exe_external_media/';
+        $manifest = json_decode((string) file_get_contents($dir . 'exe-external-media.manifest.json'), true);
+
+        $this->assertIsArray($manifest['files'] ?? null, 'el manifest no trae lista de ficheros');
+
+        foreach ($manifest['files'] as $half => $record) {
+            $this->assertFileExists($dir . $record['path'], "falta {$half}");
+            $this->assertSame(
+                $record['sha256'],
+                hash('sha256', (string) file_get_contents($dir . $record['path'])),
+                "{$half} no coincide con el digest publicado por el core"
+            );
+        }
+
+        // Editar fichero y digest a la vez es la forma obvia de burlar una comprobación
+        // por fichero, así que el buildHash cubre la propia lista de digests.
+        $keys = array_keys($manifest['files']);
+        sort($keys);
+        $lines = array_map(static fn ($k) => $k . ':' . $manifest['files'][$k]['sha256'], $keys);
+        $this->assertSame($manifest['buildHash'], hash('sha256', implode("\n", $lines)));
+    }
+
+    /** El control es postMessage crudo: ningún SDK de proveedor dentro del bundle host. */
+    public function testHostBundleCarriesNoProviderSdk(): void
+    {
+        $host = (string) file_get_contents(
+            dirname(__DIR__, 3) . '/asset/js/exe_external_media/exe-external-media-host.min.js'
+        );
+
+        $this->assertStringNotContainsString('YT.Player', $host);
+        $this->assertStringNotContainsString('Vimeo.Player', $host);
+        $this->assertStringContainsString('enablejsapi', $host);
     }
 }
